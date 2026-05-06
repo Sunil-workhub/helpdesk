@@ -68,10 +68,14 @@ import {
   Factory,
   Cog,
   Cpu,
+  Monitor,
+  Loader2,
+  ChevronUp,
 } from "lucide-react";
 import BgImage from "./assets/images/it-hepdesk-front.jpg";
 import BgImage1 from "./assets/images/it-hep-desk-bg.jpg";
 import IndefLogo from "./assets/logo/IndefLogo.png";
+import HelpdeskService from "./services/helpdesk/HelpdeskService";
 
 // ─── ORGS ────────────────────────────────────────────────────────────────────
 const ORGS = ["IML", "CSIL", "Daedalus"];
@@ -132,7 +136,7 @@ const USERS = [
     avatar: initials("Pranay Mahadik"),
     org: "IML",
   },
-  // ── HR — updated from API ──
+  // ── HR ──
   {
     id: "hr_satish",
     empId: "9152",
@@ -326,13 +330,11 @@ const USERS = [
 ];
 
 const USER_CREDENTIALS = {
-  // IT
   8165: { password: "Madhav@IT165", userId: "it_madhav" },
   8033: { password: "Harish@IT033", userId: "it_harish" },
   8213: { password: "Baba@IT213", userId: "it_babasaheb" },
   6001: { password: "Sec@IT001", userId: "it_security" },
   8295: { password: "Pranay@IT295", userId: "it_pranay" },
-  // HR — updated
   9152: { password: "Satish@9152", userId: "hr_satish" },
   7013: { password: "Vishva@7013", userId: "hr_vishvajeet" },
   7024: { password: "Shankar@7024", userId: "hr_shankar" },
@@ -345,7 +347,6 @@ const USER_CREDENTIALS = {
   9224: { password: "Anjali@9224", userId: "hr_anjali" },
   9225: { password: "Priya@9225", userId: "hr_priyanka" },
   9229: { password: "Abhay@9229", userId: "hr_abhay" },
-  // Users
   9011: { password: "Ananya@123", userId: "user_ananya" },
   9043: { password: "Suresh@456", userId: "user_suresh" },
   9076: { password: "Meera@789", userId: "user_meera" },
@@ -356,15 +357,6 @@ const USER_CREDENTIALS = {
   9230: { password: "Ramesh@230", userId: "user_ramesh" },
   9245: { password: "Priya@245", userId: "user_priya" },
 };
-
-const SOFTWARE_PROJECTS = [
-  "ILEAP",
-  "CSIL",
-  "ERP Portal",
-  "HRM Suite",
-  "Finance Module",
-  "Other",
-];
 
 const CATEGORY_META = {
   software: {
@@ -417,9 +409,85 @@ const CATEGORY_META = {
   },
 };
 
-// Categories that support On Hold + Waiting for User Input columns
-const FULL_FLOW_CATEGORIES = ["software", "erp"];
+// ─── IT MAIN CATEGORY CARDS ───────────────────────────────────────────────────
+// These are the top-level "card" categories shown first in the IT ticket modal.
+// Each maps to a CATEGORY_META key and filters the API catalog tree.
+const IT_MAIN_CATEGORIES = [
+  {
+    key: "hardware",
+    label: "Hardware",
+    desc: "Laptops, monitors, peripherals, printers",
+    Icon: HardDrive,
+    color: "amber",
+    // Keywords to match against catalogTree parentName/category for filtering
+    keywords: ["hardware"],
+  },
+  {
+    key: "networking",
+    label: "Networking",
+    desc: "Wi-Fi, VPN, connectivity issues",
+    Icon: WifiOff,
+    color: "orange",
+    keywords: ["network", "wireless", "wifi", "vpn", "connectivity"],
+  },
+  {
+    key: "software",
+    label: "Software",
+    desc: "Applications, installations, access",
+    Icon: Zap,
+    color: "violet",
+    keywords: [
+      "software",
+      "application",
+      "install",
+      "access",
+      "ileap",
+      "erp",
+      "portal",
+    ],
+  },
+  {
+    key: "erp",
+    label: "ERP Enhancement",
+    desc: "ERP module changes and enhancements",
+    Icon: Database,
+    color: "cyan",
+    keywords: ["erp", "enhancement", "module"],
+  },
+];
 
+const MAIN_CAT_COLORS = {
+  amber: {
+    card: "border-amber-200 bg-amber-50 hover:bg-amber-100",
+    active: "border-amber-500 bg-amber-100 ring-2 ring-amber-200",
+    icon: "text-amber-600",
+    label: "text-amber-800",
+    desc: "text-amber-600",
+  },
+  orange: {
+    card: "border-orange-200 bg-orange-50 hover:bg-orange-100",
+    active: "border-orange-500 bg-orange-100 ring-2 ring-orange-200",
+    icon: "text-orange-600",
+    label: "text-orange-800",
+    desc: "text-orange-600",
+  },
+  violet: {
+    card: "border-violet-200 bg-violet-50 hover:bg-violet-100",
+    active: "border-violet-500 bg-violet-100 ring-2 ring-violet-200",
+    icon: "text-violet-600",
+    label: "text-violet-800",
+    desc: "text-violet-600",
+  },
+  cyan: {
+    card: "border-cyan-200 bg-cyan-50 hover:bg-cyan-100",
+    active: "border-cyan-500 bg-cyan-100 ring-2 ring-cyan-200",
+    icon: "text-cyan-600",
+    label: "text-cyan-800",
+    desc: "text-cyan-600",
+  },
+};
+
+const FULL_FLOW_CATEGORIES = ["software", "erp"];
 const HR_STATUSES = ["Open", "Queue", "Assigned", "In Progress", "Closed"];
 
 const STATUS_META = {
@@ -501,62 +569,6 @@ const PRIORITIES = ["Critical", "Medium", "Normal"];
 const TICKET_TYPES = ["Service Request", "Incident"];
 const REQUEST_TYPES = ["Service Request", "Incident"];
 
-const IT_IMPACT_OPTIONS = [
-  {
-    value: "business",
-    label: "Business",
-    Icon: Globe,
-    desc: "Affects entire business operations",
-  },
-  {
-    value: "department",
-    label: "Department",
-    Icon: Building2,
-    desc: "Affects a whole department",
-  },
-  {
-    value: "team",
-    label: "Team",
-    Icon: Users2,
-    desc: "Affects a group / team of users",
-  },
-  {
-    value: "user",
-    label: "User",
-    Icon: UserCircle,
-    desc: "Affects a single user",
-  },
-];
-
-const HR_IMPACT_OPTIONS = [
-  {
-    value: "legal_compliance",
-    label: "Legal / Compliance Risk",
-    Icon: ShieldAlert,
-    desc: "Policy breach, statutory compliance",
-  },
-  {
-    value: "financial_payroll",
-    label: "Financial / Payroll",
-    Icon: Landmark,
-    desc: "Salary, reimbursements, benefits",
-  },
-  {
-    value: "employee_lifecycle",
-    label: "Employee Lifecycle",
-    Icon: UserPlus,
-    desc: "Joining, transfers, exits",
-  },
-  {
-    value: "general_inquiry",
-    label: "General Inquiry",
-    Icon: HelpCircle,
-    desc: "General HR questions",
-  },
-];
-
-const PERSONAL_IMPACT_VALUES = ["user", "general_inquiry"];
-
 const HOLD_REASON_OPTIONS = [
   { value: "response_not_received", label: "Response Not Received" },
   { value: "pending_approval", label: "Pending Approval" },
@@ -579,6 +591,7 @@ const ORG_PILL = {
 };
 
 const STORAGE_KEY = "enlife_helpdesk_tickets_v4";
+const CATALOG_CACHE_KEY = "enlife_hd_catalog_v1";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const fmt = (d) =>
@@ -613,10 +626,6 @@ const getCatMeta = (id) => CATEGORY_META[id] || CATEGORY_META.software;
 const getUser = (id) => USERS.find((u) => u.id === id);
 const IT_ENGINEERS = USERS.filter((u) => u.role === "IT");
 const HR_ENGINEERS = USERS.filter((u) => u.role === "HR");
-const getImpactLabel = (impact, isHR) => {
-  const opts = isHR ? HR_IMPACT_OPTIONS : IT_IMPACT_OPTIONS;
-  return opts.find((i) => i.value === impact)?.label || "—";
-};
 
 const etaBadge = (t) => {
   if (t.status === "Closed")
@@ -666,8 +675,332 @@ const getStrikeGroups = (strikes = []) => {
   return groups;
 };
 
-// Testing statuses that go in their own kanban column
 const TESTING_STATUSES = ["IT Testing", "Ready for Demo", "User Testing"];
+
+// ─── CATALOG HELPERS ─────────────────────────────────────────────────────────
+function parseCatalog(items) {
+  const itIncident = {};
+  const itService = {};
+  const hr = {};
+
+  for (const item of items) {
+    const { parentName, category, subCategory, reqType } = item;
+
+    let bucket;
+    if (reqType === "IT Incident") bucket = itIncident;
+    else if (reqType === "IT Service") bucket = itService;
+    else if (reqType === "HR") bucket = hr;
+    else continue;
+
+    if (!bucket[parentName]) bucket[parentName] = {};
+    if (!bucket[parentName][category]) bucket[parentName][category] = [];
+    if (subCategory) bucket[parentName][category].push(subCategory);
+  }
+
+  const toTree = (bucket) =>
+    Object.entries(bucket).map(([parentName, cats]) => ({
+      parentName,
+      categories: Object.entries(cats).map(([name, subCategories]) => ({
+        name,
+        subCategories,
+      })),
+    }));
+
+  return {
+    itIncident: toTree(itIncident),
+    itService: toTree(itService),
+    hr: toTree(hr),
+  };
+}
+
+// ─── NESTED CATALOG DROPDOWN ──────────────────────────────────────────────────
+/**
+ * A cascading dropdown: category → sub-category → item.
+ * For IT: filters the full combined tree (itIncident + itService) by the
+ * selected mainCategoryKey. For HR: shows the full hr tree.
+ *
+ * Props:
+ *   tree          — flat array of { parentName, categories:[{name, subCategories}] }
+ *   value         — { parentName, categoryName, subCategory }
+ *   onChange      — fn(value)
+ *   loading       — bool
+ *   accentColor   — tailwind color name for highlights (default "slate")
+ */
+function NestedCatalogDropdown({
+  tree,
+  value,
+  onChange,
+  loading,
+  accentColor = "slate",
+}) {
+  const [catOpen, setCatOpen] = useState(false);
+  const [subOpen, setSubOpen] = useState(false);
+  const [itemOpen, setItemOpen] = useState(false);
+  const catRef = useRef(null);
+  const subRef = useRef(null);
+  const itemRef = useRef(null);
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (catRef.current && !catRef.current.contains(e.target))
+        setCatOpen(false);
+      if (subRef.current && !subRef.current.contains(e.target))
+        setSubOpen(false);
+      if (itemRef.current && !itemRef.current.contains(e.target))
+        setItemOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  // Flatten all parentName entries as "Category"
+  const allParents = tree.map((p) => p.parentName);
+
+  const selectedParentObj = tree.find((p) => p.parentName === value.parentName);
+  const allCategories = selectedParentObj?.categories || [];
+  const selectedCatObj = allCategories.find(
+    (c) => c.name === value.categoryName,
+  );
+  const allSubCats = selectedCatObj?.subCategories || [];
+
+  const acc = {
+    focus:
+      accentColor === "indigo"
+        ? "focus:border-indigo-400"
+        : "focus:border-slate-400",
+    hover:
+      accentColor === "indigo" ? "hover:bg-indigo-50" : "hover:bg-slate-50",
+    selected:
+      accentColor === "indigo"
+        ? "bg-indigo-50 text-indigo-700"
+        : "bg-blue-50 text-blue-700",
+    check: accentColor === "indigo" ? "text-indigo-500" : "text-blue-500",
+  };
+
+  if (loading)
+    return (
+      <div className="flex items-center gap-2 text-sm text-slate-400 py-3">
+        <Loader2 className="w-4 h-4 animate-spin" />
+        Loading catalog…
+      </div>
+    );
+
+  if (!tree.length)
+    return (
+      <div className="text-xs text-slate-400 py-2 italic">
+        No catalog items available.
+      </div>
+    );
+
+  return (
+    <div className="space-y-2">
+      {/* Level 1: Parent / Category group */}
+      <div ref={catRef} className="relative">
+        <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
+          Category
+        </label>
+        <button
+          type="button"
+          onClick={() => {
+            setCatOpen((p) => !p);
+            setSubOpen(false);
+            setItemOpen(false);
+          }}
+          className={`w-full h-10 flex items-center justify-between rounded-xl border border-slate-300 bg-white px-3 text-sm focus:outline-none transition-colors ${acc.focus} hover:border-slate-400`}
+        >
+          <span
+            className={
+              value.parentName
+                ? "text-slate-800 font-semibold"
+                : "text-slate-400"
+            }
+          >
+            {value.parentName || "Select category…"}
+          </span>
+          <ChevronDown
+            className={`w-4 h-4 text-slate-400 transition-transform ${catOpen ? "rotate-180" : ""}`}
+          />
+        </button>
+        {catOpen && (
+          <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden max-h-52 overflow-y-auto thin-scroll">
+            {allParents.map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => {
+                  onChange({
+                    parentName: p,
+                    categoryName: "",
+                    subCategory: "",
+                  });
+                  setCatOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-3 py-2.5 text-left text-sm transition-colors ${value.parentName === p ? acc.selected + " font-bold" : "text-slate-700 " + acc.hover}`}
+              >
+                <span>{p}</span>
+                {value.parentName === p && (
+                  <CheckCircle2 className={`w-3.5 h-3.5 ${acc.check}`} />
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Level 2: Sub-type / Category name — only when parent is chosen */}
+      {value.parentName && allCategories.length > 0 && (
+        <div ref={subRef} className="relative">
+          <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
+            Sub-type
+          </label>
+          <button
+            type="button"
+            onClick={() => {
+              setSubOpen((p) => !p);
+              setItemOpen(false);
+            }}
+            className={`w-full h-10 flex items-center justify-between rounded-xl border border-slate-300 bg-white px-3 text-sm focus:outline-none transition-colors ${acc.focus} hover:border-slate-400`}
+          >
+            <span
+              className={
+                value.categoryName
+                  ? "text-slate-800 font-semibold"
+                  : "text-slate-400"
+              }
+            >
+              {value.categoryName || "Select sub-type…"}
+            </span>
+            <ChevronDown
+              className={`w-4 h-4 text-slate-400 transition-transform ${subOpen ? "rotate-180" : ""}`}
+            />
+          </button>
+          {subOpen && (
+            <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden max-h-52 overflow-y-auto thin-scroll">
+              {allCategories.map((c) => (
+                <button
+                  key={c.name}
+                  type="button"
+                  onClick={() => {
+                    onChange({
+                      ...value,
+                      categoryName: c.name,
+                      subCategory: "",
+                    });
+                    setSubOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 text-left text-sm transition-colors ${value.categoryName === c.name ? acc.selected + " font-bold" : "text-slate-700 " + acc.hover}`}
+                >
+                  <span className="flex-1 min-w-0 truncate">{c.name}</span>
+                  <div className="flex items-center gap-1.5 flex-none ml-2">
+                    {c.subCategories.length > 0 && (
+                      <span className="text-[10px] text-slate-400 font-medium">
+                        {c.subCategories.length} items
+                      </span>
+                    )}
+                    {value.categoryName === c.name && (
+                      <CheckCircle2 className={`w-3.5 h-3.5 ${acc.check}`} />
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Level 3: Specific item — only when category name is chosen and sub-cats exist */}
+      {value.categoryName && allSubCats.length > 0 && (
+        <div ref={itemRef} className="relative">
+          <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
+            Specific item
+          </label>
+          <button
+            type="button"
+            onClick={() => setItemOpen((p) => !p)}
+            className={`w-full h-10 flex items-center justify-between rounded-xl border border-slate-300 bg-white px-3 text-sm focus:outline-none transition-colors ${acc.focus} hover:border-slate-400`}
+          >
+            <span
+              className={
+                value.subCategory
+                  ? "text-slate-800 font-semibold"
+                  : "text-slate-400"
+              }
+            >
+              {value.subCategory || "Select specific item… (optional)"}
+            </span>
+            <ChevronDown
+              className={`w-4 h-4 text-slate-400 transition-transform ${itemOpen ? "rotate-180" : ""}`}
+            />
+          </button>
+          {itemOpen && (
+            <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden max-h-52 overflow-y-auto thin-scroll">
+              <button
+                type="button"
+                onClick={() => {
+                  onChange({ ...value, subCategory: "" });
+                  setItemOpen(false);
+                }}
+                className={`w-full flex items-center px-3 py-2.5 text-left text-sm transition-colors border-b border-slate-100 ${!value.subCategory ? acc.selected + " font-bold" : "text-slate-400 " + acc.hover} italic`}
+              >
+                None / Not sure
+              </button>
+              {allSubCats.map((sub) => (
+                <button
+                  key={sub}
+                  type="button"
+                  onClick={() => {
+                    onChange({ ...value, subCategory: sub });
+                    setItemOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 text-left text-sm transition-colors ${value.subCategory === sub ? acc.selected + " font-bold" : "text-slate-700 " + acc.hover}`}
+                >
+                  <span>{sub}</span>
+                  {value.subCategory === sub && (
+                    <CheckCircle2 className={`w-3.5 h-3.5 ${acc.check}`} />
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Summary breadcrumb pill row */}
+      {value.parentName && (
+        <div className="flex items-center gap-1 flex-wrap pt-1">
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+            {value.parentName}
+          </span>
+          {value.categoryName && (
+            <>
+              <ChevronRight className="w-2.5 h-2.5 text-slate-300" />
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+                {value.categoryName}
+              </span>
+            </>
+          )}
+          {value.subCategory && (
+            <>
+              <ChevronRight className="w-2.5 h-2.5 text-slate-300" />
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">
+                {value.subCategory}
+              </span>
+            </>
+          )}
+          <button
+            onClick={() =>
+              onChange({ parentName: "", categoryName: "", subCategory: "" })
+            }
+            className="ml-auto text-[10px] text-slate-400 hover:text-red-500 font-semibold"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── INITIAL TICKETS ─────────────────────────────────────────────────────────
 const INITIAL_TICKETS = [
@@ -701,6 +1034,9 @@ const INITIAL_TICKETS = [
     itAssignees: ["Harish Poojary"],
     itRemarks: "Assigned to NetOps.",
     org: "IML",
+    catalogParent: "Network Issue",
+    catalogCategory: "Wireless",
+    catalogSubCategory: "Unable to connect",
     statusHistory: [
       { status: "Open", date: "2026-03-10", note: "Submitted", remarks: "" },
       {
@@ -757,6 +1093,9 @@ const INITIAL_TICKETS = [
     itAssignees: ["Madhav Shettigar"],
     itRemarks: "Requirements under discussion.",
     org: "IML",
+    catalogParent: "Application/ Software",
+    catalogCategory: "ERP Enhancement",
+    catalogSubCategory: "Module Name",
     statusHistory: [
       { status: "Open", date: "2026-03-01", note: "Submitted", remarks: "" },
       {
@@ -820,6 +1159,9 @@ const INITIAL_TICKETS = [
     itAssignees: ["Pranay Mahadik"],
     itRemarks: "Procurement approved.",
     org: "CSIL",
+    catalogParent: "Hardware",
+    catalogCategory: "New Requirement",
+    catalogSubCategory: "Laptop",
     statusHistory: [
       { status: "Open", date: "2026-02-15", note: "Submitted", remarks: "" },
       {
@@ -882,6 +1224,9 @@ const INITIAL_TICKETS = [
     itAssignees: [],
     itRemarks: "",
     org: "CSIL",
+    catalogParent: "Hardware",
+    catalogCategory: "New Requirement",
+    catalogSubCategory: "Laptop",
     statusHistory: [
       {
         status: "Open",
@@ -924,6 +1269,9 @@ const INITIAL_TICKETS = [
     itAssignees: [],
     itRemarks: "",
     org: "CSIL",
+    catalogParent: "Application/ Software",
+    catalogCategory: "Installation",
+    catalogSubCategory: "Application Name",
     statusHistory: [
       { status: "Open", date: "2026-04-01", note: "Submitted", remarks: "" },
     ],
@@ -961,6 +1309,9 @@ const INITIAL_TICKETS = [
     itAssignees: ["Babasaheb Suryavanshi"],
     itRemarks: "Profiling DB queries.",
     org: "IML",
+    catalogParent: "Application/ ERP",
+    catalogCategory: "Ileap",
+    catalogSubCategory: "Unable to access/ Site not working",
     statusHistory: [
       { status: "Open", date: "2026-04-10", note: "Submitted", remarks: "" },
       {
@@ -1023,6 +1374,9 @@ const INITIAL_TICKETS = [
     itAssignees: ["Madhav Shettigar"],
     itRemarks: "Demo scheduled.",
     org: "IML",
+    catalogParent: "Application/ Software",
+    catalogCategory: "ERP Enhancement",
+    catalogSubCategory: "Module Name",
     statusHistory: [
       { status: "Open", date: "2026-03-20", note: "Submitted", remarks: "" },
       {
@@ -1078,6 +1432,9 @@ const INITIAL_TICKETS = [
     itAssignees: ["Satish Dukare"],
     itRemarks: "Collecting documents.",
     org: "IML",
+    catalogParent: "Attendance",
+    catalogCategory: "Attendance",
+    catalogSubCategory: "Leaves not updated",
     statusHistory: [
       { status: "Open", date: "2026-04-05", note: "Submitted", remarks: "" },
       {
@@ -1147,6 +1504,9 @@ const INITIAL_TICKETS = [
     itAssignees: [],
     itRemarks: "",
     org: "Daedalus",
+    catalogParent: "Payroll",
+    catalogCategory: "Payroll",
+    catalogSubCategory: "Salary discrepancy",
     statusHistory: [
       { status: "Open", date: "2026-04-10", note: "Submitted", remarks: "" },
     ],
@@ -1252,36 +1612,16 @@ function LoginScreen({ onLogin }) {
         @keyframes loginSpin { to { transform: rotate(360deg); } }
         @keyframes loginFadeUp { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:translateY(0)} }
         .login-card-inner { animation: loginFadeUp 0.55s ease both; }
-        .login-inp-field {
-          height:48px; padding:0 44px 0 16px;
-          border-radius:10px; border:1.5px solid ${BORDER};
-          background:#f8f9fb; font-size:13.5px; color:${TEXT_MAIN};
-          outline:none; font-family:inherit; box-sizing:border-box; width:100%;
-          transition:border-color .15s,box-shadow .15s,background .15s;
-        }
+        .login-inp-field { height:48px; padding:0 44px 0 16px; border-radius:10px; border:1.5px solid ${BORDER}; background:#f8f9fb; font-size:13.5px; color:${TEXT_MAIN}; outline:none; font-family:inherit; box-sizing:border-box; width:100%; transition:border-color .15s,box-shadow .15s,background .15s; }
         .login-inp-field:focus { border-color:${ACCENT}; box-shadow:0 0 0 3px ${INPUT_FOCUS}; background:#fff; }
         .login-inp-field.err { border-color:${ERROR_C}; background:#fef2f2; }
-        .login-btn-main {
-          height:50px; width:100%; border-radius:10px; border:none;
-          background:${ACCENT}; color:#fff; font-size:14.5px; font-weight:700;
-          cursor:pointer; font-family:inherit; letter-spacing:.02em;
-          box-shadow:2px 4px 12px rgba(87,137,160,0.38);
-          transition:opacity .15s,transform .12s,background .15s;
-          display:flex; align-items:center; justify-content:center; gap:8px;
-        }
+        .login-btn-main { height:50px; width:100%; border-radius:10px; border:none; background:${ACCENT}; color:#fff; font-size:14.5px; font-weight:700; cursor:pointer; font-family:inherit; letter-spacing:.02em; box-shadow:2px 4px 12px rgba(87,137,160,0.38); transition:opacity .15s,transform .12s,background .15s; display:flex; align-items:center; justify-content:center; gap:8px; }
         .login-btn-main:hover:not(:disabled) { opacity:.88; transform:translateY(-1px); }
         .login-btn-main:disabled { opacity:.5; cursor:not-allowed; }
-        .login-bg-grid {
-          position:absolute; inset:0;
-          background-image:linear-gradient(rgba(87,137,160,0.05) 1px,transparent 1px),
-            linear-gradient(90deg,rgba(87,137,160,0.05) 1px,transparent 1px);
-          background-size:44px 44px;
-        }
+        .login-bg-grid { position:absolute; inset:0; background-image:linear-gradient(rgba(87,137,160,0.05) 1px,transparent 1px),linear-gradient(90deg,rgba(87,137,160,0.05) 1px,transparent 1px); background-size:44px 44px; }
         @media(max-width:680px){.login-image-panel{display:none!important;}}
       `}</style>
-
       <div className="login-bg-grid" />
-
       <div
         className="login-card-inner"
         style={{
@@ -1338,15 +1678,6 @@ function LoginScreen({ onLogin }) {
           />
           <div
             style={{
-              position: "absolute",
-              inset: 0,
-              backgroundImage:
-                "linear-gradient(rgba(87,137,160,0.06) 1px,transparent 1px),linear-gradient(90deg,rgba(87,137,160,0.06) 1px,transparent 1px)",
-              backgroundSize: "32px 32px",
-            }}
-          />
-          <div
-            style={{
               position: "relative",
               zIndex: 2,
               padding: "28px 28px 0",
@@ -1384,7 +1715,7 @@ function LoginScreen({ onLogin }) {
                 style={{
                   margin: 0,
                   fontSize: 10,
-                  color: "rgb(0, 0, 0)",
+                  color: "rgb(0,0,0)",
                   fontWeight: 600,
                   letterSpacing: ".08em",
                   textTransform: "uppercase",
@@ -1433,7 +1764,7 @@ function LoginScreen({ onLogin }) {
               <br />
               <span
                 style={{
-                  color: "rgba(0, 0, 0, 0.6)",
+                  color: "rgba(0,0,0,0.6)",
                   fontSize: 15,
                   fontWeight: 500,
                 }}
@@ -1453,7 +1784,6 @@ function LoginScreen({ onLogin }) {
             </p>
           </div>
         </div>
-
         {/* RIGHT panel */}
         <div
           style={{
@@ -1513,7 +1843,6 @@ function LoginScreen({ onLogin }) {
           >
             Log in to your Helpdesk account
           </p>
-
           {error && (
             <div
               style={{
@@ -1534,7 +1863,6 @@ function LoginScreen({ onLogin }) {
               {error}
             </div>
           )}
-
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div>
               <label
@@ -1676,7 +2004,6 @@ function LoginScreen({ onLogin }) {
               )}
             </button>
           </div>
-
           <div
             style={{
               marginTop: "auto",
@@ -1723,7 +2050,8 @@ function UserDashboard({
   tickets,
   onSelectTicket,
   selectedId,
-  onCreateTicket,
+  onCreateITTicket,
+  onCreateHRTicket,
   onLogout,
 }) {
   const [page, setPage] = useState(1);
@@ -1796,11 +2124,18 @@ function UserDashboard({
               </div>
             </div>
             <button
-              onClick={onCreateTicket}
+              onClick={onCreateITTicket}
               className="inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 transition-colors"
             >
-              <Plus className="h-4 w-4" />
-              New Ticket
+              <Wrench className="h-3.5 w-3.5" />
+              IT Ticket
+            </button>
+            <button
+              onClick={onCreateHRTicket}
+              className="inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
+            >
+              <Briefcase className="h-3.5 w-3.5" />
+              HR Ticket
             </button>
             <button
               onClick={onLogout}
@@ -1831,11 +2166,52 @@ function UserDashboard({
             </div>
           ))}
         </div>
+
         {myTickets.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 text-slate-400">
-            <Inbox className="w-12 h-12 mb-4 opacity-30" />
-            <p className="text-lg font-bold">No tickets yet</p>
-            <p className="text-sm mt-1">Raise a new ticket to get started</p>
+          <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+            <div className="w-20 h-20 rounded-2xl bg-slate-100 flex items-center justify-center mb-6">
+              <Inbox className="w-10 h-10 opacity-40" />
+            </div>
+            <p className="text-xl font-extrabold text-slate-700 mb-1">
+              No tickets yet
+            </p>
+            <p className="text-sm text-slate-400 mb-8">
+              Raise a new ticket to get started with IT or HR support.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md">
+              <button
+                onClick={onCreateITTicket}
+                className="flex-1 flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-slate-200 bg-white hover:border-slate-400 hover:bg-slate-50 p-6 transition-all group"
+              >
+                <div className="w-12 h-12 rounded-xl bg-slate-900 group-hover:bg-slate-800 flex items-center justify-center transition-colors">
+                  <Wrench className="w-6 h-6 text-white" />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-extrabold text-slate-800">
+                    Raise IT Ticket
+                  </p>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Hardware, software, network issues
+                  </p>
+                </div>
+              </button>
+              <button
+                onClick={onCreateHRTicket}
+                className="flex-1 flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-indigo-200 bg-indigo-50 hover:border-indigo-400 hover:bg-indigo-100 p-6 transition-all group"
+              >
+                <div className="w-12 h-12 rounded-xl bg-indigo-600 group-hover:bg-indigo-700 flex items-center justify-center transition-colors">
+                  <Briefcase className="w-6 h-6 text-white" />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-extrabold text-indigo-800">
+                    Raise HR Ticket
+                  </p>
+                  <p className="text-xs text-indigo-400 mt-0.5">
+                    Payroll, attendance, HR queries
+                  </p>
+                </div>
+              </button>
+            </div>
           </div>
         ) : (
           <>
@@ -1854,7 +2230,6 @@ function UserDashboard({
                     <div className="flex items-start gap-4">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap mb-1">
-                          {/* CHANGE 2: org pill first */}
                           <span
                             className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${ORG_PILL[t.org]}`}
                           >
@@ -1885,6 +2260,34 @@ function UserDashboard({
                         <p className="text-sm font-bold text-slate-800 mb-1">
                           {t.description}
                         </p>
+                        {(t.catalogParent ||
+                          t.catalogCategory ||
+                          t.catalogSubCategory) && (
+                          <div className="flex items-center gap-1 mb-1 flex-wrap">
+                            {t.catalogParent && (
+                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+                                {t.catalogParent}
+                              </span>
+                            )}
+                            {t.catalogCategory &&
+                              t.catalogCategory !== t.catalogParent && (
+                                <>
+                                  <ChevronRight className="w-2.5 h-2.5 text-slate-300" />
+                                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-600">
+                                    {t.catalogCategory}
+                                  </span>
+                                </>
+                              )}
+                            {t.catalogSubCategory && (
+                              <>
+                                <ChevronRight className="w-2.5 h-2.5 text-slate-300" />
+                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600">
+                                  {t.catalogSubCategory}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        )}
                         <div className="flex items-center gap-3 text-xs text-slate-500 flex-wrap">
                           <span className="flex items-center gap-1">
                             <CalendarDays className="w-3 h-3" />
@@ -1969,7 +2372,6 @@ function TicketCard({ ticket, active, onClick, currentUser }) {
       onClick={onClick}
       className={`w-full rounded-xl border bg-white p-2.5 text-left shadow-sm transition-all duration-150 ${active ? "border-slate-800 ring-2 ring-slate-200 shadow-md" : "border-slate-200 hover:border-slate-300 hover:shadow"}`}
     >
-      {/* CHANGE 2: org pill is now first/leftmost */}
       <div className="flex items-center gap-1 mb-1.5 flex-wrap">
         <span
           className={`inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded-full border flex-none ${ORG_PILL[ticket.org]}`}
@@ -2004,6 +2406,23 @@ function TicketCard({ ticket, active, onClick, currentUser }) {
       <p className="text-[13px] font-semibold text-slate-800 truncate mb-1">
         {ticket.description}
       </p>
+      {(ticket.catalogParent || ticket.catalogCategory) && (
+        <div className="flex items-center gap-1 mb-1 flex-wrap">
+          {ticket.catalogParent && (
+            <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-slate-100 text-slate-500 truncate max-w-[80px]">
+              {ticket.catalogParent}
+            </span>
+          )}
+          {ticket.catalogSubCategory && (
+            <>
+              <ChevronRight className="w-2 h-2 text-slate-300" />
+              <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-emerald-50 text-emerald-600 truncate max-w-[80px]">
+                {ticket.catalogSubCategory}
+              </span>
+            </>
+          )}
+        </div>
+      )}
       <div className="flex items-center gap-1.5 text-[10px]">
         <User className="w-2.5 h-2.5 text-slate-400 flex-none" />
         <span className="text-slate-500 truncate flex-1 min-w-0">
@@ -2050,6 +2469,633 @@ function TicketCard({ ticket, active, onClick, currentUser }) {
   );
 }
 
+// ─── IT CREATE MODAL ──────────────────────────────────────────────────────────
+function CreateITModal({
+  catalogTree,
+  catalogLoading,
+  closedTickets,
+  currentUser,
+  onClose,
+  onSubmit,
+}) {
+  const fileRef = useRef(null);
+
+  const [form, setForm] = useState({
+    // Step 1: which main category card is selected
+    mainCategory: "", // "hardware" | "networking" | "software" | "erp"
+    // Step 2: nested catalog selection within that main category
+    catalogValue: { parentName: "", categoryName: "", subCategory: "" },
+    // IT category derived from mainCategory
+    category: "software",
+    type: "Ticket",
+    parentId: "",
+    description: "",
+    onBehalfOf: "",
+    attachment: null,
+    requestType: "Service Request",
+  });
+  const [errors, setErrors] = useState({});
+
+  const fmt_bytes = (b) => {
+    if (!b) return "";
+    if (b < 1024) return b + "B";
+    if (b < 1048576) return (b / 1024).toFixed(1) + "KB";
+    return (b / 1048576).toFixed(1) + "MB";
+  };
+
+  // When mainCategory changes, reset catalog selection and derive IT category
+  const selectMainCategory = (key) => {
+    setForm((p) => ({
+      ...p,
+      mainCategory: key,
+      category: key,
+      catalogValue: { parentName: "", categoryName: "", subCategory: "" },
+    }));
+    setErrors((e) => ({ ...e, mainCategory: undefined, catalog: undefined }));
+  };
+
+  // Filter catalogTree to only show entries relevant to the selected main category
+  const filteredCatalogTree = useMemo(() => {
+    if (!form.mainCategory) return [];
+    const meta = IT_MAIN_CATEGORIES.find((c) => c.key === form.mainCategory);
+    if (!meta) return [];
+    const keywords = meta.keywords;
+    // Combine IT Service + IT Incident trees, filter by keywords
+    const combined = [
+      ...(catalogTree.itService || []),
+      ...(catalogTree.itIncident || []),
+    ];
+    // Deduplicate by parentName
+    const seen = new Set();
+    const deduped = combined.filter((p) => {
+      if (seen.has(p.parentName)) return false;
+      seen.add(p.parentName);
+      return true;
+    });
+    // Filter: parent name or any category name must match a keyword
+    const filtered = deduped.filter((p) => {
+      const pLower = p.parentName.toLowerCase();
+      if (keywords.some((k) => pLower.includes(k))) return true;
+      return p.categories.some((c) =>
+        keywords.some((k) => c.name.toLowerCase().includes(k)),
+      );
+    });
+    // If no filtered results, show everything (fallback so user isn't stuck)
+    return filtered.length > 0 ? filtered : deduped;
+  }, [form.mainCategory, catalogTree]);
+
+  const validate = () => {
+    const errs = {};
+    if (!form.mainCategory)
+      errs.mainCategory = "Please select a category type.";
+    if (!form.catalogValue.parentName)
+      errs.catalog = "Please select a specific category.";
+    if (!form.description.trim()) errs.description = "Description required.";
+    if (form.type === "Linked Ticket" && !form.parentId)
+      errs.parentId = "Parent ticket required.";
+    setErrors(errs);
+    return !Object.keys(errs).length;
+  };
+
+  const handleSubmit = () => {
+    if (!validate()) return;
+    const fi = form.attachment
+      ? { name: form.attachment.name, size: fmt_bytes(form.attachment.size) }
+      : null;
+    onSubmit({
+      ticketDept: "IT",
+      description: form.description.trim(),
+      category: form.category,
+      requestType: form.requestType,
+      impact: "user", // default, no longer shown to user
+      softwareProject: null,
+      type: form.type,
+      parentId: form.type === "Linked Ticket" ? Number(form.parentId) : null,
+      onBehalfOf: form.onBehalfOf,
+      attachment: fi,
+      priority: null,
+      catalogParent: form.catalogValue.parentName,
+      catalogCategory: form.catalogValue.categoryName,
+      catalogSubCategory: form.catalogValue.subCategory,
+    });
+  };
+
+  return (
+    <div
+      className="modal-overlay"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="modal-box" style={{ maxWidth: "580px" }}>
+        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 flex-none">
+          <div>
+            <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+              <Wrench className="w-4 h-4 text-slate-700" />
+              Raise IT Ticket
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Submitting as{" "}
+              <span className="font-bold text-slate-700">
+                {currentUser.name}
+              </span>{" "}
+              ·{" "}
+              <span className="mono text-slate-500">#{currentUser.empId}</span>{" "}
+              ·{" "}
+              <span
+                className={`font-bold px-1.5 rounded-full text-[10px] ${ORG_PILL[currentUser.org]}`}
+              >
+                {currentUser.org}
+              </span>
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto thin-scroll flex-1 p-6 space-y-5">
+          {/* ── STEP 1: Main Category Cards ── */}
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+              What type of issue is this?
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {IT_MAIN_CATEGORIES.map((cat) => {
+                const CatIcon = cat.Icon;
+                const colors = MAIN_CAT_COLORS[cat.color];
+                const isSelected = form.mainCategory === cat.key;
+                return (
+                  <button
+                    key={cat.key}
+                    type="button"
+                    onClick={() => selectMainCategory(cat.key)}
+                    className={`flex items-start gap-3 p-3.5 rounded-xl border-2 text-left transition-all ${isSelected ? colors.active : colors.card + " border-transparent"}`}
+                  >
+                    <div className={`flex-none mt-0.5 ${colors.icon}`}>
+                      <CatIcon className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p
+                        className={`text-sm font-bold leading-tight ${isSelected ? colors.label : "text-slate-800"}`}
+                      >
+                        {cat.label}
+                      </p>
+                      <p
+                        className={`text-[11px] mt-0.5 leading-tight ${isSelected ? colors.desc : "text-slate-500"}`}
+                      >
+                        {cat.desc}
+                      </p>
+                    </div>
+                    {isSelected && (
+                      <CheckCircle2
+                        className={`w-4 h-4 flex-none ml-auto ${colors.icon}`}
+                      />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            {errors.mainCategory && (
+              <p className="mt-1.5 text-xs text-red-600 font-semibold">
+                {errors.mainCategory}
+              </p>
+            )}
+          </div>
+
+          {/* ── STEP 2: Nested Catalog Dropdown — only shown after main category is picked ── */}
+          {form.mainCategory && (
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+                Specify the issue
+              </label>
+              <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-3">
+                <NestedCatalogDropdown
+                  tree={filteredCatalogTree}
+                  value={form.catalogValue}
+                  onChange={(v) => setForm((p) => ({ ...p, catalogValue: v }))}
+                  loading={catalogLoading}
+                  accentColor="slate"
+                />
+              </div>
+              {errors.catalog && (
+                <p className="mt-1.5 text-xs text-red-600 font-semibold">
+                  {errors.catalog}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* ── Request Type — kept for IT as Incident flag matters for SLA ── */}
+          {form.mainCategory && (
+            <Field label="Request Type">
+              <div className="grid grid-cols-2 gap-2">
+                {REQUEST_TYPES.map((rt) => (
+                  <button
+                    key={rt}
+                    type="button"
+                    onClick={() => setForm((p) => ({ ...p, requestType: rt }))}
+                    className={`h-10 rounded-xl border text-sm font-bold transition-colors ${
+                      form.requestType === rt
+                        ? rt === "Incident"
+                          ? "bg-red-600 text-white border-red-600"
+                          : "bg-sky-600 text-white border-sky-600"
+                        : rt === "Incident"
+                          ? "border-red-200 text-red-700 hover:bg-red-50"
+                          : "border-sky-200 text-sky-700 hover:bg-sky-50"
+                    }`}
+                  >
+                    {rt}
+                  </button>
+                ))}
+              </div>
+            </Field>
+          )}
+
+          {/* ── Ticket type (Ticket/Linked) ── */}
+          {form.mainCategory && (
+            <Field label="Ticket Type">
+              <div className="grid grid-cols-2 gap-2">
+                {["Ticket", "Linked Ticket"].map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() =>
+                      setForm((p) => ({
+                        ...p,
+                        type,
+                        parentId: type === "Linked Ticket" ? p.parentId : "",
+                      }))
+                    }
+                    className={`h-10 rounded-xl border text-sm font-bold transition-colors ${form.type === type ? "bg-slate-900 text-white border-slate-900" : "border-slate-300 text-slate-600 hover:bg-slate-50"}`}
+                  >
+                    {type}
+                  </button>
+                ))}
+              </div>
+            </Field>
+          )}
+
+          {form.type === "Linked Ticket" && (
+            <Field label="Link to Closed Ticket" error={errors.parentId}>
+              <div className="relative">
+                <select
+                  value={form.parentId}
+                  onChange={(e) =>
+                    setForm((p) => ({ ...p, parentId: e.target.value }))
+                  }
+                  className="h-10 w-full appearance-none rounded-xl border border-slate-300 bg-white px-3 text-sm focus:outline-none focus:border-slate-400"
+                >
+                  <option value="">Select closed ticket</option>
+                  {closedTickets
+                    .filter((t) => t.ticketDept === "IT")
+                    .map((t) => (
+                      <option key={t.id} value={t.id}>
+                        #{t.id} — {t.description}
+                      </option>
+                    ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-slate-400" />
+              </div>
+            </Field>
+          )}
+
+          {/* ── Description ── */}
+          {form.mainCategory && (
+            <Field
+              label="Description / Request Details"
+              error={errors.description}
+            >
+              <textarea
+                rows={3}
+                value={form.description}
+                onChange={(e) =>
+                  setForm((p) => ({ ...p, description: e.target.value }))
+                }
+                placeholder="Clearly describe the request, affected system, scope, and urgency."
+                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:outline-none focus:border-slate-400 resize-none"
+              />
+            </Field>
+          )}
+
+          {/* ── On Behalf Of ── */}
+          {form.mainCategory && currentUser.role !== "User" && (
+            <Field label="On Behalf Of (optional)">
+              <OnBehalfOfDropdown
+                value={form.onBehalfOf}
+                onChange={(v) => setForm((p) => ({ ...p, onBehalfOf: v }))}
+                currentUserId={currentUser.id}
+              />
+            </Field>
+          )}
+
+          {/* ── Attachment ── */}
+          {form.mainCategory && (
+            <Field label="Attachment (optional)">
+              <div
+                onClick={() => fileRef.current?.click()}
+                className={`flex items-center gap-3 rounded-xl border-2 border-dashed cursor-pointer px-4 py-3 transition-all ${form.attachment ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white"}`}
+              >
+                <Paperclip
+                  className={`w-4 h-4 flex-none ${form.attachment ? "text-blue-500" : "text-slate-400"}`}
+                />
+                {form.attachment ? (
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-blue-700 truncate">
+                      {form.attachment.name}
+                    </p>
+                    <p className="text-xs text-blue-400 mono">
+                      {(form.attachment.size / 1024).toFixed(1)} KB
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-sm font-semibold text-slate-600">
+                      Click to attach
+                    </p>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      PDF, DOCX, XLSX, images
+                    </p>
+                  </div>
+                )}
+                {form.attachment && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setForm((p) => ({ ...p, attachment: null }));
+                    }}
+                    className="p-1 rounded text-blue-400 hover:text-blue-600 flex-none"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              <input
+                ref={fileRef}
+                type="file"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) setForm((p) => ({ ...p, attachment: f }));
+                }}
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.txt"
+              />
+            </Field>
+          )}
+        </div>
+
+        <div className="flex-none border-t border-slate-100 px-6 py-4 flex items-center justify-between gap-3">
+          <p className="text-xs text-slate-400">
+            Submitted as{" "}
+            <span className="font-semibold text-slate-600">
+              {currentUser.name}
+            </span>{" "}
+            · {currentUser.org}
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmit}
+              className="h-10 px-5 rounded-xl text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Raise IT Ticket
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── HR CREATE MODAL ──────────────────────────────────────────────────────────
+function CreateHRModal({
+  catalogTree,
+  catalogLoading,
+  currentUser,
+  onClose,
+  onSubmit,
+}) {
+  const fileRef = useRef(null);
+  const [form, setForm] = useState({
+    catalogValue: { parentName: "", categoryName: "", subCategory: "" },
+    description: "",
+    onBehalfOf: "",
+    attachment: null,
+  });
+  const [errors, setErrors] = useState({});
+
+  const fmt_bytes = (b) => {
+    if (!b) return "";
+    if (b < 1024) return b + "B";
+    if (b < 1048576) return (b / 1024).toFixed(1) + "KB";
+    return (b / 1048576).toFixed(1) + "MB";
+  };
+
+  const hrTree = catalogTree.hr || [];
+
+  const validate = () => {
+    const errs = {};
+    if (!form.description.trim()) errs.description = "Description required.";
+    if (!form.catalogValue.parentName)
+      errs.catalog = "Please select a category.";
+    setErrors(errs);
+    return !Object.keys(errs).length;
+  };
+
+  const handleSubmit = () => {
+    if (!validate()) return;
+    const fi = form.attachment
+      ? { name: form.attachment.name, size: fmt_bytes(form.attachment.size) }
+      : null;
+    onSubmit({
+      ticketDept: "HR",
+      description: form.description.trim(),
+      category: null,
+      requestType: "Service Request",
+      impact: "general_inquiry",
+      softwareProject: null,
+      type: "Ticket",
+      parentId: null,
+      onBehalfOf: form.onBehalfOf,
+      attachment: fi,
+      priority: null,
+      catalogParent: form.catalogValue.parentName,
+      catalogCategory: form.catalogValue.categoryName,
+      catalogSubCategory: form.catalogValue.subCategory,
+    });
+  };
+
+  return (
+    <div
+      className="modal-overlay"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="modal-box" style={{ maxWidth: "540px" }}>
+        <div className="flex items-center justify-between border-b border-indigo-100 px-6 py-4 flex-none bg-indigo-50/50">
+          <div>
+            <h2 className="text-base font-extrabold text-indigo-900 flex items-center gap-2">
+              <Briefcase className="w-4 h-4 text-indigo-600" />
+              Raise HR Ticket
+            </h2>
+            <p className="text-xs text-indigo-400 mt-0.5">
+              Submitting as{" "}
+              <span className="font-bold text-indigo-700">
+                {currentUser.name}
+              </span>{" "}
+              · <span className="mono">#{currentUser.empId}</span> ·{" "}
+              <span
+                className={`font-bold px-1.5 rounded-full text-[10px] ${ORG_PILL[currentUser.org]}`}
+              >
+                {currentUser.org}
+              </span>
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-indigo-400 hover:bg-indigo-100"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto thin-scroll flex-1 p-6 space-y-5">
+          {/* ── HR Category — nested dropdown directly ── */}
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+              Select HR Category
+            </p>
+            <div className="rounded-xl border border-indigo-100 bg-indigo-50/30 p-3">
+              <NestedCatalogDropdown
+                tree={hrTree}
+                value={form.catalogValue}
+                onChange={(v) => setForm((p) => ({ ...p, catalogValue: v }))}
+                loading={catalogLoading}
+                accentColor="indigo"
+              />
+            </div>
+            {errors.catalog && (
+              <p className="mt-1.5 text-xs text-red-600 font-semibold">
+                {errors.catalog}
+              </p>
+            )}
+          </div>
+
+          {/* ── Description ── */}
+          <Field
+            label="Description / Request Details"
+            error={errors.description}
+          >
+            <textarea
+              rows={3}
+              value={form.description}
+              onChange={(e) =>
+                setForm((p) => ({ ...p, description: e.target.value }))
+              }
+              placeholder="Describe the HR request, employee name, and relevant details."
+              className="w-full rounded-xl border border-indigo-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-400 resize-none"
+            />
+          </Field>
+
+          {/* ── On Behalf Of ── */}
+          {currentUser.role !== "User" && (
+            <Field label="On Behalf Of (optional)">
+              <OnBehalfOfDropdown
+                value={form.onBehalfOf}
+                onChange={(v) => setForm((p) => ({ ...p, onBehalfOf: v }))}
+                currentUserId={currentUser.id}
+              />
+            </Field>
+          )}
+
+          {/* ── Attachment ── */}
+          <Field label="Attachment (optional)">
+            <div
+              onClick={() => fileRef.current?.click()}
+              className={`flex items-center gap-3 rounded-xl border-2 border-dashed cursor-pointer px-4 py-3 transition-all ${form.attachment ? "border-indigo-300 bg-indigo-50" : "border-slate-200 bg-slate-50 hover:border-indigo-200 hover:bg-indigo-50/50"}`}
+            >
+              <Paperclip
+                className={`w-4 h-4 flex-none ${form.attachment ? "text-indigo-500" : "text-slate-400"}`}
+              />
+              {form.attachment ? (
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-indigo-700 truncate">
+                    {form.attachment.name}
+                  </p>
+                  <p className="text-xs text-indigo-400 mono">
+                    {(form.attachment.size / 1024).toFixed(1)} KB
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-sm font-semibold text-slate-600">
+                    Click to attach
+                  </p>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    PDF, DOCX, images
+                  </p>
+                </div>
+              )}
+              {form.attachment && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setForm((p) => ({ ...p, attachment: null }));
+                  }}
+                  className="p-1 rounded text-indigo-400 hover:text-indigo-600 flex-none"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+            <input
+              ref={fileRef}
+              type="file"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) setForm((p) => ({ ...p, attachment: f }));
+              }}
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.txt"
+            />
+          </Field>
+        </div>
+
+        <div className="flex-none border-t border-indigo-100 px-6 py-4 flex items-center justify-between gap-3 bg-indigo-50/30">
+          <p className="text-xs text-indigo-400">
+            Submitted as{" "}
+            <span className="font-semibold text-indigo-700">
+              {currentUser.name}
+            </span>{" "}
+            · {currentUser.org}
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmit}
+              className="h-10 px-5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Raise HR Ticket
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [currentUserId, setCU] = useState(null);
@@ -2057,8 +3103,39 @@ export default function App() {
     () => loadTickets() || INITIAL_TICKETS,
   );
   const [selectedId, setSelectedId] = useState(null);
-  const [createOpen, setCreateOpen] = useState(false);
+  const [createITOpen, setCreateITOpen] = useState(false);
+  const [createHROpen, setCreateHROpen] = useState(false);
   const [orgFilter, setOrgFilter] = useState("IML");
+
+  // ── Catalog state ──
+  const [catalogRaw, setCatalogRaw] = useState([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogError, setCatalogError] = useState(null);
+
+  const catalogTree = useMemo(() => parseCatalog(catalogRaw), [catalogRaw]);
+
+  useEffect(() => {
+    if (!currentUserId) return;
+    const cached = sessionStorage.getItem(CATALOG_CACHE_KEY);
+    if (cached) {
+      try {
+        setCatalogRaw(JSON.parse(cached));
+        return;
+      } catch (e) {}
+    }
+    setCatalogLoading(true);
+    HelpdeskService.GetHDCatalog()
+      .then((res) => {
+        const items = res?.data || [];
+        setCatalogRaw(items);
+        sessionStorage.setItem(CATALOG_CACHE_KEY, JSON.stringify(items));
+      })
+      .catch((err) => {
+        console.error("Catalog fetch failed:", err);
+        setCatalogError("Failed to load catalog. Using defaults.");
+      })
+      .finally(() => setCatalogLoading(false));
+  }, [currentUserId]);
 
   useEffect(() => {
     saveTickets(tickets);
@@ -2078,19 +3155,6 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  const [createForm, setCreateForm] = useState({
-    dept: "IT",
-    category: "software",
-    description: "",
-    onBehalfOf: "",
-    attachment: null,
-    type: "Ticket",
-    parentId: "",
-    requestType: "Service Request",
-    impact: "user",
-    softwareProject: "",
-  });
-  const [createErrors, setCreateErrors] = useState({});
   const [enrollForm, setEnrollForm] = useState({
     itAssignees: [],
     itStartDate: todayISO(),
@@ -2207,13 +3271,6 @@ export default function App() {
     };
   }, [tickets, isIT, isHR, orgFilter]);
 
-  const fmt_bytes = (b) => {
-    if (!b) return "";
-    if (b < 1024) return b + "B";
-    if (b < 1048576) return (b / 1024).toFixed(1) + "KB";
-    return (b / 1048576).toFixed(1) + "MB";
-  };
-
   const enrollTicket = () => {
     const errs = {};
     if (!enrollForm.itAssignees.length)
@@ -2234,17 +3291,7 @@ export default function App() {
       errs.etaDate = "ETA must be after start date.";
     setEnrollErrors(errs);
     if (Object.keys(errs).length) return;
-
-    // CHANGE 3: After enroll, status goes to "Assigned" for IT (all categories) and HR.
-    // This ensures the ticket appears in the correct "Assigned to Me" or "Queue" column.
-    let ns;
-    if (sel.ticketDept === "HR") {
-      ns = "Assigned";
-    } else {
-      // For IT — all categories now go to "Assigned" first so it appears in "Assigned to Me"
-      ns = "Assigned";
-    }
-
+    const ns = "Assigned";
     patch(sel.id, {
       enrolledByIT: true,
       itAssignees: enrollForm.itAssignees,
@@ -2512,60 +3559,21 @@ export default function App() {
     setEditPriorityModal(false);
   };
 
-  const openCreateModal = (defaultDept) => {
-    setCreateForm({
-      dept: defaultDept || (isIT ? "IT" : isHR ? "HR" : "IT"),
-      category: "software",
-      description: "",
-      onBehalfOf: "",
-      attachment: null,
-      type: "Ticket",
-      parentId: "",
-      requestType: "Service Request",
-      impact: defaultDept === "HR" ? "general_inquiry" : "user",
-      softwareProject: "",
-    });
-    setCreateErrors({});
-    setCreateOpen(true);
-  };
-
-  const createTicket = () => {
-    const errs = {};
-    if (!createForm.description.trim())
-      errs.description = "Description required.";
-    if (
-      createForm.dept === "IT" &&
-      createForm.type === "Linked Ticket" &&
-      !createForm.parentId
-    )
-      errs.parentId = "Parent ticket required.";
-    setCreateErrors(errs);
-    if (Object.keys(errs).length) return;
+  const createTicket = (fields) => {
     const nid = Date.now();
-    const fi = createForm.attachment
-      ? {
-          name: createForm.attachment.name,
-          size: fmt_bytes(createForm.attachment.size),
-        }
-      : null;
-    let autoPriority = null;
-    if (PERSONAL_IMPACT_VALUES.includes(createForm.impact)) {
-      autoPriority = "Normal";
-    }
     const t = {
       id: nid,
-      ticketDept: createForm.dept,
-      description: createForm.description.trim(),
-      category: createForm.dept === "HR" ? null : createForm.category,
+      ticketDept: fields.ticketDept,
+      description: fields.description,
+      category: fields.category,
       submittedBy: currentUser.name,
       submittedByEmpId: currentUser.empId,
-      onBehalfOf: createForm.onBehalfOf,
-      priority: autoPriority,
+      onBehalfOf: fields.onBehalfOf || "",
+      priority: fields.priority || null,
       ticketType: null,
-      requestType: createForm.requestType,
-      impact: createForm.impact,
-      softwareProject:
-        createForm.dept === "HR" ? null : createForm.softwareProject || null,
+      requestType: fields.requestType,
+      impact: fields.impact || "user",
+      softwareProject: fields.softwareProject || null,
       status: "Open",
       submittedDate: todayISO(),
       itStartDate: null,
@@ -2575,22 +3583,22 @@ export default function App() {
       closingNote: "",
       holdRemarks: "",
       holdReasonType: "",
-      attachment: fi,
-      type: createForm.dept === "HR" ? "Ticket" : createForm.type,
-      parentId:
-        createForm.dept === "IT" && createForm.type === "Linked Ticket"
-          ? Number(createForm.parentId)
-          : null,
+      attachment: fields.attachment || null,
+      type: fields.type || "Ticket",
+      parentId: fields.parentId || null,
       linkedTaskIds: [],
       enrolledByIT: false,
       itAssignees: [],
       itRemarks: "",
       org: currentUser.org,
+      catalogParent: fields.catalogParent || "",
+      catalogCategory: fields.catalogCategory || "",
+      catalogSubCategory: fields.catalogSubCategory || "",
       statusHistory: [
         {
           status: "Open",
           date: todayISO(),
-          note: `Submitted by ${currentUser.name} (#${currentUser.empId})${createForm.onBehalfOf ? " on behalf of " + createForm.onBehalfOf : ""}`,
+          note: `Submitted by ${currentUser.name} (#${currentUser.empId})${fields.onBehalfOf ? " on behalf of " + fields.onBehalfOf : ""}`,
           remarks: "",
         },
       ],
@@ -2609,8 +3617,8 @@ export default function App() {
       return next;
     });
     setSelectedId(nid);
-    setCreateOpen(false);
-    setCreateErrors({});
+    setCreateITOpen(false);
+    setCreateHROpen(false);
   };
 
   const getById = (id) => tickets.find((t) => t.id === id);
@@ -2635,7 +3643,8 @@ export default function App() {
           tickets={tickets}
           onSelectTicket={setSelectedId}
           selectedId={selectedId}
-          onCreateTicket={() => openCreateModal("IT")}
+          onCreateITTicket={() => setCreateITOpen(true)}
+          onCreateHRTicket={() => setCreateHROpen(true)}
           onLogout={() => setCU(null)}
         />
         {sel && (
@@ -2701,17 +3710,22 @@ export default function App() {
             onEditPriority={() => setEditPriorityModal(true)}
           />
         )}
-        {createOpen && (
-          <CreateModal
-            form={createForm}
-            errors={createErrors}
+        {createITOpen && (
+          <CreateITModal
+            catalogTree={catalogTree}
+            catalogLoading={catalogLoading}
             closedTickets={closedTickets}
             currentUser={currentUser}
-            onChange={setCreateForm}
-            onClose={() => {
-              setCreateOpen(false);
-              setCreateErrors({});
-            }}
+            onClose={() => setCreateITOpen(false)}
+            onSubmit={createTicket}
+          />
+        )}
+        {createHROpen && (
+          <CreateHRModal
+            catalogTree={catalogTree}
+            catalogLoading={catalogLoading}
+            currentUser={currentUser}
+            onClose={() => setCreateHROpen(false)}
             onSubmit={createTicket}
           />
         )}
@@ -2719,21 +3733,11 @@ export default function App() {
     );
   }
 
-  // ── CHANGE 3: Build IT Kanban columns ─────────────────────────────────────
-  // Logic:
-  // - Open (unassigned): not enrolled, status === "Open"
-  // - Queue: enrolled, assigned to someone else (not me), not closed, not testing, not hold/waiting
-  // - Assigned to Me: enrolled, assigned to me, status === "Assigned" (any category)
-  // - In Progress (Mine): enrolled, assigned to me, status === "In Progress"
-  // - Testing: enrolled, any testing status
-  // - Waiting for User Input / On Hold: full-flow categories only
-  // - Closed
+  // ── IT Kanban columns ──
   const buildITColumns = () => {
     const openUnassigned = visibleTickets.filter(
       (t) => !t.enrolledByIT && t.status === "Open",
     );
-
-    // Queue: enrolled but NOT assigned to me (or assigned to others), active non-special statuses
     const queueAll = visibleTickets.filter(
       (t) =>
         t.enrolledByIT &&
@@ -2745,8 +3749,6 @@ export default function App() {
         t.status !== "Assigned" &&
         !t.itAssignees?.includes(currentUser.name),
     );
-
-    // Also add enrolled tickets assigned to others that are Assigned or In Progress status
     const queueOthers = visibleTickets.filter(
       (t) =>
         t.enrolledByIT &&
@@ -2755,43 +3757,33 @@ export default function App() {
         t.status !== "Closed" &&
         !TESTING_STATUSES.includes(t.status),
     );
-
     const combinedQueue = [...queueAll, ...queueOthers];
-
-    // Assigned to Me: enrolled, I am assignee, status === "Assigned"
     const assignedToMe = visibleTickets.filter(
       (t) =>
         t.enrolledByIT &&
         t.status === "Assigned" &&
         t.itAssignees?.includes(currentUser.name),
     );
-
-    // In Progress (Mine): enrolled, I am assignee, status === "In Progress"
     const inProgressMine = visibleTickets.filter(
       (t) =>
         t.enrolledByIT &&
         t.status === "In Progress" &&
         t.itAssignees?.includes(currentUser.name),
     );
-
     const testingCol = visibleTickets.filter(
       (t) => t.enrolledByIT && TESTING_STATUSES.includes(t.status),
     );
-
     const waitingCol = visibleTickets.filter(
       (t) =>
         t.status === "Waiting for User Input" &&
         FULL_FLOW_CATEGORIES.includes(t.category),
     );
-
     const onHoldCol = visibleTickets.filter(
       (t) =>
         t.status === "On Hold" && FULL_FLOW_CATEGORIES.includes(t.category),
     );
-
     const closedCol = visibleTickets.filter((t) => t.status === "Closed");
-
-    const cols = [
+    return [
       {
         key: "open_unassigned",
         label: "Open",
@@ -2875,43 +3867,28 @@ export default function App() {
         accent: "slate",
       },
     ];
-    return cols;
   };
 
-  // ── CHANGE 3: Build HR Kanban columns ────────────────────────────────────
-  // Logic:
-  // - Open: not enrolled, status === "Open"
-  // - Queue: enrolled, status === "Queue"
-  // - Assigned to Me: enrolled, I am assignee, status === "Assigned"
-  // - In Progress (Mine): enrolled, I am assignee, status === "In Progress"
-  // - Closed
   const buildHRColumns = () => {
     const hrOpenUnassigned = visibleTickets.filter(
       (t) => !t.enrolledByIT && t.status === "Open",
     );
-
     const hrQueue = visibleTickets.filter(
       (t) => t.enrolledByIT && t.status === "Queue",
     );
-
-    // Assigned to Me: enrolled, I am assignee, status === "Assigned"
     const hrAssignedToMe = visibleTickets.filter(
       (t) =>
         t.enrolledByIT &&
         t.status === "Assigned" &&
         t.itAssignees?.includes(currentUser.name),
     );
-
-    // In Progress (Mine): enrolled, I am assignee, status === "In Progress"
     const hrInProgressMine = visibleTickets.filter(
       (t) =>
         t.enrolledByIT &&
         t.status === "In Progress" &&
         t.itAssignees?.includes(currentUser.name),
     );
-
     const hrClosed = visibleTickets.filter((t) => t.status === "Closed");
-
     return [
       {
         key: "hr_open",
@@ -2957,7 +3934,6 @@ export default function App() {
   };
 
   const allKanbanCols = isHR ? buildHRColumns() : buildITColumns();
-  const deptLabel = isHR ? "HR Department" : "IT Department";
 
   const ACCENT_COL = {
     emerald: {
@@ -3051,13 +4027,24 @@ export default function App() {
                     </p>
                   </div>
                 </div>
-                <button
-                  onClick={() => openCreateModal(isHR ? "HR" : "IT")}
-                  className={`inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-bold text-white ${isHR ? "bg-indigo-600 hover:bg-indigo-700" : "bg-slate-900 hover:bg-slate-800"} transition-colors`}
-                >
-                  <Plus className="h-4 w-4" />
-                  New Ticket
-                </button>
+                {isIT && (
+                  <button
+                    onClick={() => setCreateITOpen(true)}
+                    className="inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 transition-colors"
+                  >
+                    <Plus className="h-4 w-4" />
+                    IT Ticket
+                  </button>
+                )}
+                {isHR && (
+                  <button
+                    onClick={() => setCreateHROpen(true)}
+                    className="inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
+                  >
+                    <Plus className="h-4 w-4" />
+                    HR Ticket
+                  </button>
+                )}
                 <button
                   onClick={() => setCU(null)}
                   className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-300 px-3 text-sm font-semibold text-slate-600 hover:bg-slate-50"
@@ -3066,7 +4053,6 @@ export default function App() {
                 </button>
               </div>
             </div>
-
             <div className="mt-3 flex items-center justify-between flex-wrap gap-3">
               <OrgFilterBar value={orgFilter} onChange={setOrgFilter} />
               <div className="flex flex-wrap gap-2 items-center">
@@ -3080,7 +4066,6 @@ export default function App() {
                   ...(isIT
                     ? [
                         { l: "On Hold", v: stats.onHold, t: "amber" },
-                        // CHANGE 5: "Waiting" → "Waiting for User Input"
                         {
                           l: "Waiting for User Input",
                           v: stats.waiting,
@@ -3107,6 +4092,13 @@ export default function App() {
             </div>
           </div>
         </header>
+
+        {catalogError && (
+          <div className="flex-none bg-amber-50 border-b border-amber-200 px-5 py-2 text-xs text-amber-700 font-medium flex items-center gap-2">
+            <AlertCircle className="w-3.5 h-3.5" />
+            {catalogError}
+          </div>
+        )}
 
         <main className="flex-1 overflow-x-auto overflow-y-hidden p-4 min-h-0">
           <div
@@ -3564,17 +4556,22 @@ export default function App() {
         </div>
       )}
 
-      {createOpen && (
-        <CreateModal
-          form={createForm}
-          errors={createErrors}
+      {createITOpen && (
+        <CreateITModal
+          catalogTree={catalogTree}
+          catalogLoading={catalogLoading}
           closedTickets={closedTickets}
           currentUser={currentUser}
-          onChange={setCreateForm}
-          onClose={() => {
-            setCreateOpen(false);
-            setCreateErrors({});
-          }}
+          onClose={() => setCreateITOpen(false)}
+          onSubmit={createTicket}
+        />
+      )}
+      {createHROpen && (
+        <CreateHRModal
+          catalogTree={catalogTree}
+          catalogLoading={catalogLoading}
+          currentUser={currentUser}
+          onClose={() => setCreateHROpen(false)}
           onSubmit={createTicket}
         />
       )}
@@ -3821,7 +4818,6 @@ function TicketModal({
   const catFlow = isHRTicket ? HR_STATUSES : cat ? cat.statuses : [];
   const curIdx = catFlow.indexOf(ticket.status);
   const endRef = useRef(null);
-  const impactLabel = getImpactLabel(ticket.impact, isHRTicket);
   const isReadOnly = (isIT || isHR) && !canAct && ticket.enrolledByIT;
   const isIncident =
     ticket.ticketType === "Incident" || ticket.requestType === "Incident";
@@ -3838,8 +4834,6 @@ function TicketModal({
 
   const getById = (id) => allTickets.find((t) => t.id === id);
 
-  // CHANGE 3: nextStatuses — from "Assigned" the only valid next is "In Progress"
-  // From "In Progress" the rest of the flow continues
   const nextStatuses =
     canAct && !isClosed && !isOnHold && !isWaiting
       ? catFlow.filter(
@@ -3876,7 +4870,6 @@ function TicketModal({
           <div className="flex items-start gap-4">
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap gap-1.5 mb-2">
-                {/* CHANGE 2: org pill first in modal header too */}
                 <span
                   className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${ORG_PILL[ticket.org]}`}
                 >
@@ -3909,16 +4902,6 @@ function TicketModal({
                     className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${PRIORITY_PILL[ticket.priority]}`}
                   >
                     {ticket.priority}
-                  </span>
-                )}
-                {ticket.impact && (
-                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
-                    {impactLabel}
-                  </span>
-                )}
-                {ticket.softwareProject && (
-                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 border border-violet-200">
-                    {ticket.softwareProject}
                   </span>
                 )}
                 {ticket.type === "Linked Ticket" && (
@@ -3963,6 +4946,34 @@ function TicketModal({
               <p className="text-base font-bold text-slate-900 leading-snug">
                 {ticket.description}
               </p>
+              {(ticket.catalogParent ||
+                ticket.catalogCategory ||
+                ticket.catalogSubCategory) && (
+                <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+                  {ticket.catalogParent && (
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+                      {ticket.catalogParent}
+                    </span>
+                  )}
+                  {ticket.catalogCategory &&
+                    ticket.catalogCategory !== ticket.catalogParent && (
+                      <>
+                        <ChevronRight className="w-2.5 h-2.5 text-slate-300" />
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-600">
+                          {ticket.catalogCategory}
+                        </span>
+                      </>
+                    )}
+                  {ticket.catalogSubCategory && (
+                    <>
+                      <ChevronRight className="w-2.5 h-2.5 text-slate-300" />
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">
+                        {ticket.catalogSubCategory}
+                      </span>
+                    </>
+                  )}
+                </div>
+              )}
               <div className="flex flex-wrap gap-2 mt-2">
                 <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-600 rounded-full px-2.5 py-1 text-xs font-medium">
                   <User className="w-3 h-3" />
@@ -4127,15 +5138,8 @@ function TicketModal({
                     label="Request Type"
                     value={ticket.requestType || "—"}
                   />
-                  <InfoBox label="Impact" value={impactLabel} />
                   {!isHRTicket && (
                     <InfoBox label="Category" value={cat?.label || "—"} />
-                  )}
-                  {ticket.softwareProject && (
-                    <InfoBox
-                      label="Project / Module"
-                      value={ticket.softwareProject}
-                    />
                   )}
                   {ticket.onBehalfOf && (
                     <InfoBox label="On Behalf Of" value={ticket.onBehalfOf} />
@@ -4154,6 +5158,24 @@ function TicketModal({
                     <InfoBox
                       label="Parent Ticket"
                       value={`#${ticket.parentId}`}
+                    />
+                  )}
+                  {ticket.catalogParent && (
+                    <InfoBox
+                      label="Catalog Parent"
+                      value={ticket.catalogParent}
+                    />
+                  )}
+                  {ticket.catalogCategory && (
+                    <InfoBox
+                      label="Catalog Category"
+                      value={ticket.catalogCategory}
+                    />
+                  )}
+                  {ticket.catalogSubCategory && (
+                    <InfoBox
+                      label="Catalog Item"
+                      value={ticket.catalogSubCategory}
                     />
                   )}
                 </div>
@@ -4415,7 +5437,6 @@ function TicketModal({
                 </div>
               )}
 
-              {/* CHANGE 3: Show "Move to In Progress" action when ticket is in "Assigned" status */}
               {canAct && ticket.enrolledByIT && isAssigned && !isClosed && (
                 <Section
                   title="Start Work"
@@ -4434,7 +5455,6 @@ function TicketModal({
                 </Section>
               )}
 
-              {/* Three-strike follow-up: only for IT full-flow categories */}
               {canAct && isWaiting && isFullFlowIT && (
                 <Section
                   title="Three-Strike Follow-up"
@@ -4474,12 +5494,9 @@ function TicketModal({
                       );
                       const isNext = !strike && activeGroup.length === num - 1;
                       const locked = !strike && !isNext;
-                      // CHANGE 4: response can only be marked on the LAST sent strike
-                      // If a later strike exists, the previous one's response window is closed
                       const isLastSentStrike =
                         activeGroup.length > 0 &&
                         activeGroup[activeGroup.length - 1]?.id === strike?.id;
-
                       return (
                         <div
                           key={num}
@@ -4540,7 +5557,6 @@ function TicketModal({
                               {strike.responseNote}
                             </div>
                           )}
-                          {/* CHANGE 4: Only show response input on the LAST sent strike (not on earlier ones) */}
                           {strike &&
                             !strike.responseReceived &&
                             isLastSentStrike && (
@@ -4574,7 +5590,6 @@ function TicketModal({
                                 </button>
                               </div>
                             )}
-                          {/* CHANGE 4: Show "window closed" message for earlier strikes that had no response */}
                           {strike &&
                             !strike.responseReceived &&
                             !isLastSentStrike && (
@@ -4666,7 +5681,6 @@ function TicketModal({
                 </Section>
               )}
 
-              {/* Advance Stage: only show when not Assigned (Assigned uses "Start Work" above) */}
               {canAct &&
                 ticket.enrolledByIT &&
                 !isClosed &&
@@ -4746,7 +5760,6 @@ function TicketModal({
                 </Section>
               )}
 
-              {/* Also allow closing from Assigned status */}
               {canAct && ticket.enrolledByIT && !isClosed && isAssigned && (
                 <div className="flex gap-2 mt-1">
                   <button
@@ -4939,356 +5952,6 @@ function TicketModal({
               })}
             </div>
           )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── CREATE MODAL ─────────────────────────────────────────────────────────────
-function CreateModal({
-  form,
-  errors,
-  closedTickets,
-  currentUser,
-  onChange,
-  onClose,
-  onSubmit,
-}) {
-  const fileRef = useRef(null);
-  const isHRTicket = form.dept === "HR";
-  const fmt_bytes = (b) => {
-    if (!b) return "";
-    if (b < 1024) return b + "B";
-    if (b < 1048576) return (b / 1024).toFixed(1) + "KB";
-    return (b / 1048576).toFixed(1) + "MB";
-  };
-  const handleDeptChange = (dept) => {
-    const defaultImpact = dept === "HR" ? "general_inquiry" : "user";
-    onChange((p) => ({ ...p, dept, impact: defaultImpact, onBehalfOf: "" }));
-  };
-
-  return (
-    <div
-      className="modal-overlay"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div className="modal-box" style={{ maxWidth: "580px" }}>
-        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 flex-none">
-          <div>
-            <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-              {isHRTicket ? (
-                <>
-                  <Briefcase className="w-4 h-4 text-indigo-600" />
-                  Raise HR Ticket
-                </>
-              ) : (
-                <>Raise IT Ticket</>
-              )}
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Submitting as{" "}
-              <span className="font-bold text-slate-700">
-                {currentUser.name}
-              </span>{" "}
-              ·{" "}
-              <span className="mono text-slate-500">#{currentUser.empId}</span>{" "}
-              ·{" "}
-              <span
-                className={`font-bold px-1.5 rounded-full text-[10px] ${ORG_PILL[currentUser.org]}`}
-              >
-                {currentUser.org}
-              </span>
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-        <div className="overflow-y-auto thin-scroll flex-1 p-6 space-y-4">
-          <Field label="Ticket Department">
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => handleDeptChange("IT")}
-                className={`flex items-center justify-center gap-2 h-11 rounded-xl border text-sm font-bold transition-all ${form.dept === "IT" ? "bg-slate-900 text-white border-slate-900" : "border-slate-300 text-slate-600 hover:bg-slate-50"}`}
-              >
-                <Wrench className="w-4 h-4" />
-                IT Ticket
-              </button>
-              <button
-                onClick={() => handleDeptChange("HR")}
-                className={`flex items-center justify-center gap-2 h-11 rounded-xl border text-sm font-bold transition-all ${form.dept === "HR" ? "bg-indigo-600 text-white border-indigo-600" : "border-indigo-200 text-indigo-700 hover:bg-indigo-50"}`}
-              >
-                <Briefcase className="w-4 h-4" />
-                HR Ticket
-              </button>
-            </div>
-          </Field>
-          <Field label="Request Type">
-            <div className="grid grid-cols-2 gap-2">
-              {REQUEST_TYPES.map((rt) => (
-                <button
-                  key={rt}
-                  onClick={() => onChange((p) => ({ ...p, requestType: rt }))}
-                  className={`h-10 rounded-xl border text-sm font-bold transition-colors ${form.requestType === rt ? (rt === "Incident" ? "bg-red-600 text-white border-red-600" : "bg-sky-600 text-white border-sky-600") : rt === "Incident" ? "border-red-200 text-red-700 hover:bg-red-50" : "border-sky-200 text-sky-700 hover:bg-sky-50"}`}
-                >
-                  {rt}
-                </button>
-              ))}
-            </div>
-          </Field>
-          {!isHRTicket && (
-            <>
-              <Field label="Category">
-                <div className="grid grid-cols-2 gap-2">
-                  {Object.entries(CATEGORY_META).map(([id, meta]) => {
-                    const Icon = meta.Icon;
-                    return (
-                      <button
-                        key={id}
-                        onClick={() =>
-                          onChange((p) => ({
-                            ...p,
-                            category: id,
-                            softwareProject: "",
-                          }))
-                        }
-                        className={`flex items-center gap-2 h-10 px-3 rounded-xl border text-xs font-bold transition-all ${form.category === id ? `${meta.pill} shadow-sm` : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}
-                      >
-                        <Icon className="w-3.5 h-3.5" />
-                        {meta.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </Field>
-              {(form.category === "software" || form.category === "erp") && (
-                <Field label="Project / Module">
-                  <div className="relative">
-                    <select
-                      value={form.softwareProject}
-                      onChange={(e) =>
-                        onChange((p) => ({
-                          ...p,
-                          softwareProject: e.target.value,
-                        }))
-                      }
-                      className="h-10 w-full appearance-none rounded-xl border border-slate-300 bg-white px-3 text-sm focus:outline-none focus:border-violet-400"
-                    >
-                      <option value="">Select project...</option>
-                      {SOFTWARE_PROJECTS.map((p) => (
-                        <option key={p} value={p}>
-                          {p}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-slate-400" />
-                  </div>
-                </Field>
-              )}
-            </>
-          )}
-          <Field label={isHRTicket ? "Type" : "Impact"}>
-            {isHRTicket ? (
-              <div className="grid grid-cols-2 gap-2">
-                {HR_IMPACT_OPTIONS.map((imp) => {
-                  const ImpIcon = imp.Icon;
-                  const selected = form.impact === imp.value;
-                  return (
-                    <button
-                      key={imp.value}
-                      onClick={() =>
-                        onChange((p) => ({ ...p, impact: imp.value }))
-                      }
-                      className={`flex items-start gap-2.5 p-3 rounded-xl border text-left transition-all ${selected ? "bg-indigo-600 text-white border-indigo-600 shadow-sm" : "border-slate-200 text-slate-600 hover:bg-indigo-50 hover:border-indigo-200"}`}
-                    >
-                      <ImpIcon
-                        className={`w-4 h-4 flex-none mt-0.5 ${selected ? "text-white" : "text-indigo-500"}`}
-                      />
-                      <div>
-                        <p
-                          className={`text-xs font-bold leading-tight ${selected ? "text-white" : "text-slate-800"}`}
-                        >
-                          {imp.label}
-                        </p>
-                        <p
-                          className={`text-[10px] mt-0.5 leading-tight ${selected ? "text-indigo-200" : "text-slate-400"}`}
-                        >
-                          {imp.desc}
-                        </p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-2">
-                {IT_IMPACT_OPTIONS.map((imp) => {
-                  const ImpIcon = imp.Icon;
-                  return (
-                    <button
-                      key={imp.value}
-                      onClick={() =>
-                        onChange((p) => ({ ...p, impact: imp.value }))
-                      }
-                      className={`flex items-center gap-2 h-10 px-3 rounded-xl border text-xs font-bold transition-all text-left ${form.impact === imp.value ? "bg-slate-900 text-white border-slate-900" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}
-                    >
-                      <ImpIcon className="w-3.5 h-3.5 flex-none" />
-                      {imp.label}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </Field>
-          {!isHRTicket && form.type === "Linked Ticket" && (
-            <Field label="Link to Closed Ticket" error={errors.parentId}>
-              <div className="relative">
-                <select
-                  value={form.parentId}
-                  onChange={(e) =>
-                    onChange((p) => ({ ...p, parentId: e.target.value }))
-                  }
-                  className="h-10 w-full appearance-none rounded-xl border border-slate-300 bg-white px-3 text-sm focus:outline-none focus:border-slate-400"
-                >
-                  <option value="">Select closed ticket</option>
-                  {closedTickets
-                    .filter((t) => t.ticketDept === "IT")
-                    .map((t) => (
-                      <option key={t.id} value={t.id}>
-                        #{t.id} — {t.description}
-                      </option>
-                    ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-slate-400" />
-              </div>
-            </Field>
-          )}
-          {!isHRTicket && (
-            <Field label="Ticket Type">
-              <div className="grid grid-cols-2 gap-2">
-                {["Ticket", "Linked Ticket"].map((type) => (
-                  <button
-                    key={type}
-                    onClick={() =>
-                      onChange((p) => ({
-                        ...p,
-                        type,
-                        parentId: type === "Linked Ticket" ? p.parentId : "",
-                      }))
-                    }
-                    className={`h-10 rounded-xl border text-sm font-bold transition-colors ${form.type === type ? "bg-slate-900 text-white border-slate-900" : "border-slate-300 text-slate-600 hover:bg-slate-50"}`}
-                  >
-                    {type}
-                  </button>
-                ))}
-              </div>
-            </Field>
-          )}
-          <Field
-            label="Description / Request Details"
-            error={errors.description}
-          >
-            <textarea
-              rows={3}
-              value={form.description}
-              onChange={(e) =>
-                onChange((p) => ({ ...p, description: e.target.value }))
-              }
-              placeholder={
-                isHRTicket
-                  ? "Describe the HR request, employee name, and relevant details."
-                  : "Clearly describe the request, affected system, scope, and urgency."
-              }
-              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:outline-none focus:border-slate-400 resize-none"
-            />
-          </Field>
-          {currentUser.role !== "User" && (
-            <Field label="On Behalf Of (optional)">
-              <OnBehalfOfDropdown
-                value={form.onBehalfOf}
-                onChange={(v) => onChange((p) => ({ ...p, onBehalfOf: v }))}
-                currentUserId={currentUser.id}
-              />
-            </Field>
-          )}
-          <Field label="Attachment (optional)">
-            <div
-              onClick={() => fileRef.current?.click()}
-              className={`flex items-center gap-3 rounded-xl border-2 border-dashed cursor-pointer px-4 py-3 transition-all ${form.attachment ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white"}`}
-            >
-              <Paperclip
-                className={`w-4 h-4 flex-none ${form.attachment ? "text-blue-500" : "text-slate-400"}`}
-              />
-              {form.attachment ? (
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-blue-700 truncate">
-                    {form.attachment.name}
-                  </p>
-                  <p className="text-xs text-blue-400 mono">
-                    {(form.attachment.size / 1024).toFixed(1)} KB
-                  </p>
-                </div>
-              ) : (
-                <div>
-                  <p className="text-sm font-semibold text-slate-600">
-                    Click to attach
-                  </p>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    PDF, DOCX, XLSX, images
-                  </p>
-                </div>
-              )}
-              {form.attachment && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onChange((p) => ({ ...p, attachment: null }));
-                  }}
-                  className="p-1 rounded text-blue-400 hover:text-blue-600 flex-none"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-            <input
-              ref={fileRef}
-              type="file"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) onChange((p) => ({ ...p, attachment: f }));
-              }}
-              accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.txt"
-            />
-          </Field>
-        </div>
-        <div className="flex-none border-t border-slate-100 px-6 py-4 flex items-center justify-between gap-3">
-          <p className="text-xs text-slate-400">
-            Submitted as{" "}
-            <span className="font-semibold text-slate-600">
-              {currentUser.name}
-            </span>{" "}
-            · {currentUser.org}
-          </p>
-          <div className="flex gap-2">
-            <button
-              onClick={onClose}
-              className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-slate-50"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={onSubmit}
-              className={`h-10 px-5 rounded-xl text-sm font-bold text-white flex items-center gap-2 ${isHRTicket ? "bg-indigo-600 hover:bg-indigo-700" : "bg-slate-900 hover:bg-slate-800"}`}
-            >
-              <Plus className="w-4 h-4" />
-              Raise Ticket
-            </button>
-          </div>
         </div>
       </div>
     </div>
