@@ -20,7 +20,20 @@ const API = {
   },
 
   Helpdesk: {
+    getTickets: "/ILeap/GetHDTickets",
+    createITHelpdeskTicket: "/ILeap/CreateHDTicket",
+    enrollTicket: "/ILeap/EnrollHDTicket",
+    reassignTicket: "/ILeap/ReassignHDTicket",
+    updateTicketStatus: "/ILeap/ChangeHDTicketStatus",
+    sendStrike: "/ILeap/sendStrike",
+    updateHistory: "/ILeap/AddHDHistory",
+    getHistoryById: "/ILeap/GetHDHistory",
+    getStrikes: "/ILeap/GetHDStrikes",
+    respondStrike: "/ILeap/RespondHDStrike",
+    addDiscussion: "/ILeap/AddHDDiscussion",
+    getDiscussions: "/ILeap/GetHDDiscussions",
     GetHDCatalog: "/ILeap/GetHDCatalog",
+    getTicketEmployees: "/ILeap/GetHDTicketEmployees",
   },
 
   // common
