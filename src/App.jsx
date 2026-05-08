@@ -3616,22 +3616,31 @@ export default function App() {
             (t) => t.ticketDept === (isIT ? "IT" : "HR") && t.org === orgFilter,
           )
         : tickets;
-    const overdue = base.filter(
+
+    // For IT/HR: open/closed are org-wide; in-progress/hold/waiting are mine only
+    const mineBase =
+      isIT || isHR
+        ? base.filter((t) => t.itAssignees?.includes(currentUser?.name))
+        : base;
+
+    const overdue = mineBase.filter(
       (t) =>
         t.etaDate &&
         t.status !== "Closed" &&
         daysBetween(todayISO(), t.etaDate) < 0,
     ).length;
+
     return {
       total: base.length,
       open: base.filter((t) => t.status === "Open").length,
-      inProgress: base.filter((t) => t.status === "In Progress").length,
-      onHold: base.filter((t) => t.status === "On Hold").length,
-      waiting: base.filter((t) => t.status === "Waiting for User Input").length,
+      inProgress: mineBase.filter((t) => t.status === "In Progress").length,
+      onHold: mineBase.filter((t) => t.status === "On Hold").length,
+      waiting: mineBase.filter((t) => t.status === "Waiting for User Input")
+        .length,
       closed: base.filter((t) => t.status === "Closed").length,
       overdue,
     };
-  }, [tickets, isIT, isHR, orgFilter]);
+  }, [tickets, isIT, isHR, orgFilter, currentUser]);
 
   const enrollTicket = () => {
     const errs = {};
@@ -4132,17 +4141,25 @@ export default function App() {
         t.status === "In Progress" &&
         t.itAssignees?.includes(currentUser.name),
     );
+    // REPLACE these three in buildITColumns():
+
     const testingCol = visibleTickets.filter(
-      (t) => t.enrolledByIT && TESTING_STATUSES.includes(t.status),
+      (t) =>
+        t.enrolledByIT &&
+        TESTING_STATUSES.includes(t.status) &&
+        t.itAssignees?.includes(currentUser.name),
     );
     const waitingCol = visibleTickets.filter(
       (t) =>
         t.status === "Waiting for User Input" &&
-        FULL_FLOW_CATEGORIES.includes(t.category),
+        FULL_FLOW_CATEGORIES.includes(t.category) &&
+        t.itAssignees?.includes(currentUser.name),
     );
     const onHoldCol = visibleTickets.filter(
       (t) =>
-        t.status === "On Hold" && FULL_FLOW_CATEGORIES.includes(t.category),
+        t.status === "On Hold" &&
+        FULL_FLOW_CATEGORIES.includes(t.category) &&
+        t.itAssignees?.includes(currentUser.name),
     );
     const closedCol = visibleTickets.filter((t) => t.status === "Closed");
     return [
@@ -4390,22 +4407,40 @@ export default function App() {
                   </div>
                 </div>
                 {isIT && (
-                  <button
-                    onClick={() => setCreateITOpen(true)}
-                    className="inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 transition-colors"
-                  >
-                    <Plus className="h-4 w-4" />
-                    IT Ticket
-                  </button>
+                  <>
+                    <button
+                      onClick={() => setCreateITOpen(true)}
+                      className="inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 transition-colors"
+                    >
+                      <Plus className="h-4 w-4" />
+                      IT Ticket
+                    </button>
+                    <button
+                      onClick={() => setCreateHROpen(true)}
+                      className="inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
+                    >
+                      <Briefcase className="h-4 w-4" />
+                      HR Ticket
+                    </button>
+                  </>
                 )}
                 {isHR && (
-                  <button
-                    onClick={() => setCreateHROpen(true)}
-                    className="inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
-                  >
-                    <Plus className="h-4 w-4" />
-                    HR Ticket
-                  </button>
+                  <>
+                    <button
+                      onClick={() => setCreateITOpen(true)}
+                      className="inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 transition-colors"
+                    >
+                      <Wrench className="h-4 w-4" />
+                      IT Ticket
+                    </button>
+                    <button
+                      onClick={() => setCreateHROpen(true)}
+                      className="inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
+                    >
+                      <Plus className="h-4 w-4" />
+                      HR Ticket
+                    </button>
+                  </>
                 )}
                 <button
                   onClick={() => setCU(null)}
