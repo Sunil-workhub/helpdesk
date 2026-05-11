@@ -1,13 +1,15 @@
-// HelpdeskPage.jsx — API-bound Helpdesk (IT + HR)
-// Session user: localStorage key "user" → { emp_Id, emp_Name, emp_No, dept_Id, org_Id, ... }
+// HelpdeskPage.jsx — API-bound Helpdesk (IT + HR) — FINAL
+// Session user: sessionStorage key "user" → { emp_Id, emp_Name, emp_No, dept_Id, org_Id, ... }
 // dept_Id 7 = IT | dept_Id 5 = HR | others = normal User
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import * as XLSX from "xlsx";
 import {
   AlertCircle,
   ArrowRight,
   Bell,
   BellOff,
+  Briefcase,
   CalendarDays,
   CheckCircle2,
   ChevronDown,
@@ -15,9 +17,13 @@ import {
   ChevronLeft,
   Clock3,
   Database,
+  Download,
+  EyeOff,
+  Filter,
   FlaskConical,
   HardDrive,
   Inbox,
+  List,
   Loader2,
   LogOut,
   Mail,
@@ -25,8 +31,11 @@ import {
   Paperclip,
   PlayCircle,
   Plus,
+  RefreshCw,
   Send,
+  Tag,
   Timer,
+  ArrowLeftRight,
   User,
   UserCheck,
   Users,
@@ -36,15 +45,7 @@ import {
   XCircle,
   Zap,
   ClipboardList,
-  ArrowLeftRight,
-  RefreshCw,
-  Tag,
-  Briefcase,
-  EyeOff,
-  Filter,
-  List,
   TestTube,
-  SquareArrowOutUpRight,
 } from "lucide-react";
 import ITHelpdeskService from "../../services/helpdesk/HelpdeskService";
 import HelpdeskService from "../../services/helpdesk/HelpdeskService";
@@ -58,17 +59,15 @@ function getSessionUser() {
   return null;
 }
 
-// dept_Id 7 = IT, 5 = HR
 function deriveRole(deptId) {
   if (deptId === 7) return "IT";
   if (deptId === 5) return "HR";
   return "User";
 }
 
-// ─── CATALOG CACHE KEY ────────────────────────────────────────────────────────
+// ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const CATALOG_CACHE_KEY = "enlife_hd_catalog_v2";
 
-// ─── CATEGORY / STATUS META ───────────────────────────────────────────────────
 const CATEGORY_META = {
   software: {
     label: "Software",
@@ -252,14 +251,7 @@ const daysBetween = (a, b) => {
   return Math.ceil((d2 - d1) / 86400000);
 };
 const getCatMeta = (id) => CATEGORY_META[id] || CATEGORY_META.software;
-const getCatMetaFromStr = (catStr) => {
-  // category is stored as "parentName,categoryName,subCategory"
-  const parts = (catStr || "").split(",");
-  const derived = deriveCategory(parts[0] || "", parts[1] || "");
-  return getCatMeta(derived);
-};
 
-// Map assignees stored as comma-separated string → array
 const parseAssignees = (str) =>
   str
     ? str
@@ -267,9 +259,7 @@ const parseAssignees = (str) =>
         .map((s) => s.trim())
         .filter(Boolean)
     : [];
-const joinAssignees = (arr) => (arr || []).join(",");
 
-// Parse category string "parentName,categoryName,subCategory"
 const parseCategoryStr = (str) => {
   const parts = (str || "").split(",");
   return {
@@ -704,7 +694,7 @@ function NestedCatalogDropdown({
   );
 }
 
-// ─── ASSIGNEE DROPDOWN (uses API employees) ────────────────────────────────────
+// ─── ASSIGNEE DROPDOWN (API employees) ────────────────────────────────────────
 function AssigneeDropdown({
   value,
   onChange,
@@ -863,6 +853,403 @@ function HRPill({ small = false }) {
       <Briefcase className="w-3 h-3" />
       HR
     </span>
+  );
+}
+
+const safeSheetName = (name, fallback = "Sheet") => {
+  const cleaned = String(name || fallback)
+    .replace(/[:\\/?*\[\]]/g, " - ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 31);
+
+  return cleaned || fallback;
+};
+
+// ─── EXCEL DOWNLOAD UTILITIES ─────────────────────────────────────────────────
+function buildOngoingSheets(tickets, dept) {
+  const deptTickets = tickets.filter(
+    (t) => t.ticketDept === dept && t.status !== "Closed",
+  );
+
+  const columns = [
+    "Ticket No",
+    "Org",
+    "Department",
+    "Description",
+    "Category",
+    "Catalog Parent",
+    "Catalog Category",
+    "Catalog Item",
+    "Status",
+    "Priority",
+    "Request Type",
+    "Submitted By",
+    "Emp ID",
+    "Submitted Date",
+    "Start Date",
+    "ETA Date",
+    "ETA Hours",
+    "Assignees",
+    "Remarks",
+    "Attachment",
+  ];
+
+  const toRow = (t) => [
+    t.ticketNo || t.id,
+    t.org,
+    t.ticketDept === "HR" ? "HR" : "IT",
+    t.description,
+    t.ticketDept === "HR" ? "HR" : getCatMeta(t.category)?.label || t.category,
+    t.catalogParent || "",
+    t.catalogCategory || "",
+    t.catalogSubCategory || "",
+    t.status,
+    t.priority || "",
+    t.requestType || "",
+    t.submittedBy,
+    t.submittedByEmpId || "",
+    t.submittedDate || "",
+    t.itStartDate || "",
+    t.etaDate || "",
+    t.etaHours || "",
+    t.itAssignees?.join(", ") || "",
+    t.itRemarks || "",
+    t.attachment?.name || "",
+  ];
+
+  const groups = {
+    Open: deptTickets.filter((t) => t.status === "Open"),
+    "In Progress": deptTickets.filter((t) =>
+      [
+        "Requirement",
+        "Discussion",
+        "Assigned",
+        "In Progress",
+        "IT Testing",
+        "Ready for Demo",
+        "User Testing",
+        "Queue",
+      ].includes(t.status),
+    ),
+    "Waiting / On Hold": deptTickets.filter((t) =>
+      ["Waiting for User Input", "On Hold"].includes(t.status),
+    ),
+  };
+
+  const wb = XLSX.utils.book_new();
+
+  const summaryData = [
+    ["Helpdesk Ongoing Tickets Report"],
+    ["Department", dept],
+    ["Generated", new Date().toLocaleString("en-IN")],
+    [],
+    ["Category", "Count"],
+    ...Object.entries(groups).map(([k, v]) => [k, v.length]),
+    ["Total", deptTickets.length],
+  ];
+
+  const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
+  summaryWs["A1"] = { v: summaryData[0][0], t: "s" };
+  summaryWs["!cols"] = [{ wch: 28 }, { wch: 10 }];
+  XLSX.utils.book_append_sheet(wb, summaryWs, safeSheetName("Summary"));
+
+  Object.entries(groups).forEach(([groupName, rows]) => {
+    const data = [columns, ...rows.map(toRow)];
+    const ws = XLSX.utils.aoa_to_sheet(data);
+
+    ws["!cols"] = columns.map((c, i) => {
+      const widths = [
+        12, 8, 10, 40, 15, 20, 20, 20, 15, 10, 14, 20, 10, 14, 14, 12, 10, 25,
+        30, 20,
+      ];
+      return { wch: widths[i] || 15 };
+    });
+
+    XLSX.utils.book_append_sheet(wb, ws, safeSheetName(groupName));
+  });
+
+  return wb;
+}
+
+function buildClosedSheet(tickets, dept, from, to) {
+  const deptTickets = tickets.filter((t) => {
+    if (t.ticketDept !== dept || t.status !== "Closed") return false;
+    const d = t.submittedDate || "";
+    return d >= from && d <= to;
+  });
+
+  const columns = [
+    "Ticket No",
+    "Org",
+    "Department",
+    "Description",
+    "Category",
+    "Catalog Parent",
+    "Catalog Category",
+    "Catalog Item",
+    "Status",
+    "Priority",
+    "Request Type",
+    "Submitted By",
+    "Emp ID",
+    "Submitted Date",
+    "Start Date",
+    "ETA Date",
+    "ETA Hours",
+    "Closing Date",
+    "Closing Note",
+    "Assignees",
+    "Remarks",
+    "Attachment",
+    "Days to Close",
+    "Auto Closed",
+  ];
+
+  const toRow = (t) => {
+    const daysToClose =
+      t.submittedDate && t.closingDate
+        ? daysBetween(t.submittedDate, t.closingDate)
+        : "";
+    return [
+      t.ticketNo || t.id,
+      t.org,
+      t.ticketDept === "HR" ? "HR" : "IT",
+      t.description,
+      t.ticketDept === "HR"
+        ? "HR"
+        : getCatMeta(t.category)?.label || t.category,
+      t.catalogParent || "",
+      t.catalogCategory || "",
+      t.catalogSubCategory || "",
+      t.status,
+      t.priority || "",
+      t.requestType || "",
+      t.submittedBy,
+      t.submittedByEmpId || "",
+      t.submittedDate || "",
+      t.itStartDate || "",
+      t.etaDate || "",
+      t.etaHours || "",
+      t.closingDate || "",
+      t.closingNote || "",
+      (t.itAssignees || []).join(", "),
+      t.itRemarks || "",
+      t.attachment?.name || "",
+      daysToClose,
+      t.autoClosedAfterStrikes ? "Yes" : "No",
+    ];
+  };
+
+  const wb = XLSX.utils.book_new();
+
+  // Summary
+  const summaryData = [
+    ["Helpdesk Closed Tickets Report"],
+    [`Department: ${dept}`],
+    [`Date Range: ${from} to ${to}`],
+    [`Generated: ${new Date().toLocaleString("en-IN")}`],
+    [],
+    ["Total Closed", deptTickets.length],
+    ["Auto Closed", deptTickets.filter((t) => t.autoClosedAfterStrikes).length],
+    [
+      "Avg Days to Close",
+      deptTickets.length
+        ? (
+            deptTickets.reduce((acc, t) => {
+              if (t.submittedDate && t.closingDate)
+                return acc + daysBetween(t.submittedDate, t.closingDate);
+              return acc;
+            }, 0) / deptTickets.length
+          ).toFixed(1)
+        : "N/A",
+    ],
+  ];
+  const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
+  summaryWs["!cols"] = [{ wch: 28 }, { wch: 14 }];
+  XLSX.utils.book_append_sheet(wb, summaryWs, "Summary");
+
+  // Closed tickets sheet
+  const data = [columns, ...deptTickets.map(toRow)];
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  ws["!cols"] = columns.map((_, i) => {
+    const w = [
+      12, 8, 10, 40, 15, 20, 20, 20, 10, 10, 14, 20, 10, 14, 14, 12, 10, 14, 35,
+      25, 30, 20, 12, 10,
+    ];
+    return { wch: w[i] || 15 };
+  });
+  XLSX.utils.book_append_sheet(wb, ws, "Closed Tickets");
+
+  return wb;
+}
+
+// ─── EXCEL DOWNLOAD MODAL ─────────────────────────────────────────────────────
+function ExcelDownloadModal({ onClose, tickets, dept }) {
+  const [mode, setMode] = useState(null); // "ongoing" | "closed"
+  const [fromDate, setFrom] = useState("");
+  const [toDate, setTo] = useState(todayISO());
+  const [error, setError] = useState("");
+
+  const handleDownload = () => {
+    setError("");
+    if (mode === "ongoing") {
+      const wb = buildOngoingSheets(tickets, dept);
+      XLSX.writeFile(wb, `Helpdesk_${dept}_Ongoing_${todayISO()}.xlsx`);
+      onClose();
+    } else if (mode === "closed") {
+      if (!fromDate) {
+        setError("Please select a start date.");
+        return;
+      }
+      if (fromDate > toDate) {
+        setError("Start date must be before end date.");
+        return;
+      }
+      const wb = buildClosedSheet(tickets, dept, fromDate, toDate);
+      XLSX.writeFile(
+        wb,
+        `Helpdesk_${dept}_Closed_${fromDate}_to_${toDate}.xlsx`,
+      );
+      onClose();
+    }
+  };
+
+  return (
+    <div
+      className="modal-overlay"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="mini-modal p-6" style={{ maxWidth: "420px" }}>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+              <Download className="w-4 h-4 text-slate-700" />
+              Download Excel Report
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {dept} Helpdesk · Select report type
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Report type selection */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          {[
+            {
+              key: "ongoing",
+              label: "Ongoing Tickets",
+              desc: "Open, In Progress, Waiting",
+              icon: "🔄",
+              active: "border-blue-500 bg-blue-50 ring-2 ring-blue-100",
+              idle: "border-slate-200 bg-white hover:border-slate-300",
+            },
+            {
+              key: "closed",
+              label: "Closed Tickets",
+              desc: "Select date range",
+              icon: "✅",
+              active:
+                "border-emerald-500 bg-emerald-50 ring-2 ring-emerald-100",
+              idle: "border-slate-200 bg-white hover:border-slate-300",
+            },
+          ].map((opt) => (
+            <button
+              key={opt.key}
+              onClick={() => {
+                setMode(opt.key);
+                setError("");
+              }}
+              className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 text-center transition-all ${mode === opt.key ? opt.active : opt.idle}`}
+            >
+              <span className="text-2xl">{opt.icon}</span>
+              <div>
+                <p
+                  className={`text-sm font-bold ${mode === opt.key ? "" : "text-slate-700"}`}
+                >
+                  {opt.label}
+                </p>
+                <p className="text-[11px] text-slate-500 mt-0.5">{opt.desc}</p>
+              </div>
+              {mode === opt.key && (
+                <CheckCircle2 className="w-4 h-4 text-current" />
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Date range for closed */}
+        {mode === "closed" && (
+          <div className="space-y-3 mb-4 p-3 rounded-xl border border-slate-200 bg-slate-50">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500">
+              Date Range (Submitted Date)
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="From">
+                <input
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => setFrom(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm focus:outline-none focus:border-emerald-400"
+                />
+              </Field>
+              <Field label="To">
+                <input
+                  type="date"
+                  value={toDate}
+                  max={todayISO()}
+                  onChange={(e) => setTo(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm focus:outline-none focus:border-emerald-400"
+                />
+              </Field>
+            </div>
+          </div>
+        )}
+
+        {/* Ongoing description */}
+        {mode === "ongoing" && (
+          <div className="mb-4 p-3 rounded-xl border border-blue-100 bg-blue-50/50 text-xs text-blue-700">
+            <p className="font-bold mb-1">Includes 3 sheets:</p>
+            <p>
+              📋 <b>Open</b> — Unassigned / newly raised
+            </p>
+            <p>
+              ⚙️ <b>In Progress</b> — Assigned, working, testing
+            </p>
+            <p>
+              ⏸️ <b>Waiting / On Hold</b> — Pending user input or blocked
+            </p>
+          </div>
+        )}
+
+        {error && (
+          <p className="mb-3 text-xs text-red-600 font-semibold">{error}</p>
+        )}
+
+        <div className="flex gap-2">
+          <button
+            onClick={onClose}
+            className="flex-1 h-10 rounded-xl border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleDownload}
+            disabled={!mode}
+            className={`flex-1 h-10 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 disabled:opacity-40 ${dept === "HR" ? "bg-indigo-600 hover:bg-indigo-700" : "bg-slate-900 hover:bg-slate-800"}`}
+          >
+            <Download className="w-4 h-4" />
+            Download
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1347,7 +1734,7 @@ function CreateHRModal({
   );
 }
 
-// ─── TICKET CARD (Kanban) ─────────────────────────────────────────────────────
+// ─── TICKET CARD ──────────────────────────────────────────────────────────────
 function TicketCard({ ticket, active, onClick, currentUser }) {
   const isHRTicket = ticket.ticketDept === "HR";
   const cat =
@@ -1692,7 +2079,7 @@ function UserDashboard({
                         <p className="text-sm font-bold text-slate-800 mb-1">
                           {t.description}
                         </p>
-                        {(t.catalogParent || t.catalogCategory) && (
+                        {(t.catalogParent || t.catalogSubCategory) && (
                           <div className="flex items-center gap-1 mb-1 flex-wrap">
                             {t.catalogParent && (
                               <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
@@ -2018,7 +2405,6 @@ function TicketModal({
             </button>
           </div>
 
-          {/* Quick stats */}
           <div className="grid grid-cols-4 gap-2 mt-3">
             <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-2">
               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
@@ -2052,7 +2438,6 @@ function TicketModal({
             </div>
           </div>
 
-          {/* Status flow */}
           {catFlow.length > 0 && (
             <div className="mt-3 flex items-center gap-1 overflow-x-auto pb-1">
               {catFlow.map((s, i) => {
@@ -2076,7 +2461,6 @@ function TicketModal({
             </div>
           )}
 
-          {/* Tabs */}
           <div className="flex gap-1 bg-slate-100 p-1 rounded-xl mt-3">
             {["details", "discussion", "history"].map((t) => (
               <button
@@ -2101,6 +2485,7 @@ function TicketModal({
               Loading details…
             </div>
           )}
+
           {!detailLoading && tab === "details" && (
             <div className="p-6 space-y-4">
               {isReadOnly && (
@@ -2223,7 +2608,6 @@ function TicketModal({
                           </div>
                         </Field>
                       </div>
-
                       <AssigneeDropdown
                         value={enrollForm.assignees || []}
                         onChange={(v) =>
@@ -2232,7 +2616,6 @@ function TicketModal({
                         error={enrollErrors.assignees}
                         employees={employees}
                       />
-
                       <div className="grid grid-cols-2 gap-3">
                         <Field
                           label="Start Date"
@@ -2286,7 +2669,6 @@ function TicketModal({
                           </Field>
                         )}
                       </div>
-
                       <Field label="Remarks (optional)">
                         <textarea
                           rows={2}
@@ -2301,7 +2683,6 @@ function TicketModal({
                           className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:outline-none focus:border-slate-400 resize-none"
                         />
                       </Field>
-
                       <button
                         onClick={onEnroll}
                         disabled={enrollLoading}
@@ -2362,7 +2743,6 @@ function TicketModal({
                 </Section>
               )}
 
-              {/* Hold/Waiting info */}
               {(isOnHold || isWaiting) && (
                 <div
                   className={`rounded-2xl border p-4 ${isWaiting ? "border-orange-200 bg-orange-50" : "border-amber-200 bg-amber-50"}`}
@@ -2390,7 +2770,6 @@ function TicketModal({
                 </div>
               )}
 
-              {/* Start Work */}
               {canAct && ticket.enrolledByIT && isAssigned && !isClosed && (
                 <Section
                   title="Start Work"
@@ -2725,7 +3104,6 @@ function TicketModal({
                 </Section>
               )}
 
-              {/* Assigned quick actions */}
               {canAct && ticket.enrolledByIT && !isClosed && isAssigned && (
                 <div className="flex gap-2 mt-1">
                   <button
@@ -2747,7 +3125,6 @@ function TicketModal({
                 </div>
               )}
 
-              {/* Closed */}
               {isClosed && (
                 <div
                   className={`rounded-2xl border p-4 ${ticket.autoClosedAfterStrikes ? "border-red-200 bg-red-50" : "border-emerald-200 bg-emerald-50"}`}
@@ -2981,11 +3358,12 @@ export default function HelpdeskPage() {
   const [enrollLoading, setEnrollLoading] = useState(false);
   const [msgLoading, setMsgLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [excelModalOpen, setExcelModalOpen] = useState(false); // Excel download modal
 
   // Ticket detail sub-data
-  const [ticketMessages, setTicketMessages] = useState({}); // { ticketId: [] }
-  const [ticketStrikes, setTicketStrikes] = useState({}); // { ticketId: [] }
-  const [ticketHistory, setTicketHistory] = useState({}); // { ticketId: [] }
+  const [ticketMessages, setTicketMessages] = useState({});
+  const [ticketStrikes, setTicketStrikes] = useState({});
+  const [ticketHistory, setTicketHistory] = useState({});
 
   // Modal state
   const [enrollForm, setEnrollForm] = useState({
@@ -3032,14 +3410,13 @@ export default function HelpdeskPage() {
           ? { dept: "HR", empId: currentUser.emp_Id, org: orgFilter }
           : { empId: currentUser.emp_Id, org: orgFilter };
       const res = await ITHelpdeskService.getTickets(payload);
-      const raw = res?.data || [];
-      setTickets(raw.map(mapApiTicket));
+      setTickets((res?.data || []).map(mapApiTicket));
     } catch (e) {
       console.error("Fetch tickets error:", e);
     } finally {
       setTicketsLoading(false);
     }
-  }, [isIT, isHR, currentUser.emp_Id]);
+  }, [isIT, isHR, currentUser.emp_Id, orgFilter]);
 
   // ── Fetch catalog ──
   useEffect(() => {
@@ -3074,7 +3451,7 @@ export default function HelpdeskPage() {
     fetchTickets();
   }, [fetchTickets]);
 
-  // ── Fetch detail data when selecting a ticket ──
+  // ── Fetch detail data when selecting ──
   useEffect(() => {
     if (!selectedId) return;
     const loadDetail = async () => {
@@ -3089,15 +3466,13 @@ export default function HelpdeskPage() {
           ...prev,
           [selectedId]: histRes?.data || [],
         }));
-        // Enrich messages with role info
         const msgs = (msgRes?.data || []).map((m) => {
-          const empId = m.message_By;
-          const emp = employees.find((e) => e.emp_Id === empId);
+          const emp = employees.find((e) => e.emp_Id === m.message_By);
           return {
             ...m,
             isIT: emp?.dept_Id === 7,
             isHR: emp?.dept_Id === 5,
-            senderId: empId,
+            senderId: m.message_By,
           };
         });
         setTicketMessages((prev) => ({ ...prev, [selectedId]: msgs }));
@@ -3114,7 +3489,7 @@ export default function HelpdeskPage() {
     loadDetail();
   }, [selectedId, employees]);
 
-  // Reset enroll form on ticket change
+  // Reset forms on ticket change
   useEffect(() => {
     setEnrollForm({
       assignees: [],
@@ -3138,7 +3513,6 @@ export default function HelpdeskPage() {
     setEditPriorityModal(false);
   }, [selectedId]);
 
-  // Build selected ticket with merged detail data
   const sel = useMemo(() => {
     if (!selectedId) return null;
     const base = tickets.find((t) => t.id === selectedId);
@@ -3151,12 +3525,10 @@ export default function HelpdeskPage() {
     };
   }, [selectedId, tickets, ticketMessages, ticketStrikes, ticketHistory]);
 
-  // ── canAct ──
   const canActOnTicket = useMemo(() => {
     if (!sel || isDeptUser) return false;
     const myName = currentUser.emp_Name;
     const myId = String(currentUser.emp_Id);
-    const enrolled = sel.enrolledByIT;
     const isMyTicket =
       sel.itAssignees?.includes(myName) || sel.itAssigneeIds?.includes(myId);
     const isOpen = sel.status === "Open";
@@ -3165,7 +3537,6 @@ export default function HelpdeskPage() {
     return false;
   }, [sel, isIT, isHR, isDeptUser, currentUser]);
 
-  // ── Patch ticket locally ──
   const patchLocal = useCallback((id, data) => {
     setTickets((prev) =>
       prev.map((t) => (t.id === id ? { ...t, ...data } : t)),
@@ -3201,7 +3572,7 @@ export default function HelpdeskPage() {
     }
   };
 
-  // ── Enroll ticket ──
+  // ── Enroll ──
   const enrollTicket = async () => {
     const errs = {};
     if (!enrollForm.assignees?.length)
@@ -3219,7 +3590,7 @@ export default function HelpdeskPage() {
     setEnrollLoading(true);
     try {
       const assignedIds = enrollForm.assignees.map((e) => e.emp_Id).join(",");
-      const payload = {
+      await ITHelpdeskService.enrollTicket({
         ticket_Id: sel.id,
         priority: enrollForm.priority,
         req_Type: enrollForm.ticketType,
@@ -3228,8 +3599,7 @@ export default function HelpdeskPage() {
         eta_Time: enrollForm.etaHours || "",
         remarks: enrollForm.itRemarks.trim(),
         updated_By: currentUser.emp_Id,
-      };
-      await ITHelpdeskService.enrollTicket(payload);
+      });
       await fetchTickets();
       setSelectedId(null);
     } catch (e) {
@@ -3245,7 +3615,7 @@ export default function HelpdeskPage() {
       await ITHelpdeskService.updateTicketStatus({
         ticket_Id: sel.id,
         status: ns,
-        remarks: remarks,
+        remarks,
         updated_By: currentUser.emp_Id,
       });
       patchLocal(sel.id, { status: ns });
@@ -3337,7 +3707,7 @@ export default function HelpdeskPage() {
     }
   };
 
-  // ── Send strike ──
+  // ── Strike ──
   const sendStrike = async () => {
     const errs = {};
     if (!strikeForm.mailId.trim()) errs.mailId = "Mail ID required.";
@@ -3351,16 +3721,14 @@ export default function HelpdeskPage() {
       !groups[groups.length - 1].every((s) => s.response_Received)
         ? groups[groups.length - 1]
         : [];
-    const strikeNo = activeGroup.length + 1;
     try {
       await ITHelpdeskService.sendStrike({
         ticket_Id: sel.id,
-        strike_No: strikeNo,
+        strike_No: activeGroup.length + 1,
         mail_Id: strikeForm.mailId.trim(),
         strike_Note: strikeForm.note.trim(),
         sent_By: currentUser.emp_Id,
       });
-      // Refresh strikes
       const res = await ITHelpdeskService.getStrikes(sel.id);
       setTicketStrikes((prev) => ({ ...prev, [sel.id]: res?.data || [] }));
       setStrikeForm({ mailId: "", note: "" });
@@ -3440,7 +3808,6 @@ export default function HelpdeskPage() {
     }
   };
 
-  // ── Stage confirm ──
   const confirmStageMove = async () => {
     if (!stageRemarksModal.targetStatus) return;
     await moveStatus(stageRemarksModal.targetStatus, stageRemarksModal.remarks);
@@ -3468,7 +3835,6 @@ export default function HelpdeskPage() {
     }
   };
 
-  // ── Edit type ──
   const submitEditType = async (nt) => {
     try {
       await ITHelpdeskService.updateHistory({
@@ -3492,7 +3858,6 @@ export default function HelpdeskPage() {
     }
   };
 
-  // ── Edit priority ──
   const submitEditPriority = async (np) => {
     try {
       await ITHelpdeskService.updateHistory({
@@ -3510,7 +3875,6 @@ export default function HelpdeskPage() {
     }
   };
 
-  // ── Logout ──
   const handleLogout = () => {
     sessionStorage.removeItem("user");
     window.location.href = "/";
@@ -3617,7 +3981,7 @@ export default function HelpdeskPage() {
         accent: "purple",
       },
       {
-        key: "in_progress_me",
+        key: "in_progress",
         label: "In Progress",
         meta: STATUS_META["In Progress"],
         items: inProgressMine,
@@ -3786,7 +4150,6 @@ export default function HelpdeskPage() {
     },
   };
 
-  // ── Global styles ──
   const globalStyles = `
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
     *,*::before,*::after{box-sizing:border-box;}
@@ -3804,7 +4167,7 @@ export default function HelpdeskPage() {
     .cb-self{background:#3b82f6;color:#fff;border-radius:1rem 1rem 0.25rem 1rem;padding:.5rem .875rem;max-width:78%;font-size:.8125rem;line-height:1.5;}
   `;
 
-  // ── User (non-IT/HR) view ──
+  // ─── User view ──────────────────────────────────────────────────────────────
   if (isDeptUser) {
     return (
       <>
@@ -3904,7 +4267,7 @@ export default function HelpdeskPage() {
     );
   }
 
-  // ── IT / HR Kanban view ──
+  // ─── IT / HR Kanban view ────────────────────────────────────────────────────
   return (
     <>
       <style>{globalStyles}</style>
@@ -3953,24 +4316,32 @@ export default function HelpdeskPage() {
                     </p>
                   </div>
                 </div>
-                {isIT && (
-                  <button
-                    onClick={() => setCreateITOpen(true)}
-                    className="inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 transition-colors"
-                  >
-                    <Plus className="h-4 w-4" />
-                    IT Ticket
-                  </button>
-                )}
-                {isHR && (
-                  <button
-                    onClick={() => setCreateHROpen(true)}
-                    className="inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
-                  >
-                    <Plus className="h-4 w-4" />
-                    HR Ticket
-                  </button>
-                )}
+
+                {/* Both IT and HR can raise both ticket types — from prototype */}
+                <button
+                  onClick={() => setCreateITOpen(true)}
+                  className="inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 transition-colors"
+                >
+                  <Wrench className="h-3.5 w-3.5" />
+                  {isIT ? "IT Ticket" : "IT Ticket"}
+                </button>
+                <button
+                  onClick={() => setCreateHROpen(true)}
+                  className="inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
+                >
+                  <Briefcase className="h-3.5 w-3.5" />
+                  HR Ticket
+                </button>
+
+                {/* Excel Download — IT/HR only */}
+                <button
+                  onClick={() => setExcelModalOpen(true)}
+                  className={`inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-bold border transition-colors ${isHR ? "border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100" : "border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100"}`}
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Export
+                </button>
+
                 <button
                   onClick={handleLogout}
                   className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-300 px-3 text-sm font-semibold text-slate-600 hover:bg-slate-50"
@@ -4508,7 +4879,7 @@ export default function HelpdeskPage() {
         </div>
       )}
 
-      {/* Create IT/HR modals */}
+      {/* Create modals */}
       {createITOpen && (
         <CreateITModal
           catalogTree={catalogTree}
@@ -4527,6 +4898,15 @@ export default function HelpdeskPage() {
           onClose={() => setCreateHROpen(false)}
           onSubmit={createTicket}
           submitting={submitting}
+        />
+      )}
+
+      {/* Excel Download Modal — IT/HR only */}
+      {excelModalOpen && (
+        <ExcelDownloadModal
+          onClose={() => setExcelModalOpen(false)}
+          tickets={tickets}
+          dept={isIT ? "IT" : "HR"}
         />
       )}
     </>

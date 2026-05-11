@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import * as XLSX from "xlsx";
 import {
   AlertCircle,
   ArrowRight,
@@ -12,6 +13,7 @@ import {
   ChevronLeft,
   Clock3,
   Database,
+  Download,
   FlaskConical,
   HardDrive,
   Inbox,
@@ -409,9 +411,6 @@ const CATEGORY_META = {
   },
 };
 
-// ─── IT MAIN CATEGORY CARDS ───────────────────────────────────────────────────
-// These are the top-level "card" categories shown first in the IT ticket modal.
-// Each maps to a CATEGORY_META key and filters the API catalog tree.
 const IT_MAIN_CATEGORIES = [
   {
     key: "hardware",
@@ -419,7 +418,6 @@ const IT_MAIN_CATEGORIES = [
     desc: "Laptops, monitors, peripherals, printers",
     Icon: HardDrive,
     color: "amber",
-    // Keywords to match against catalogTree parentName/category for filtering
     keywords: ["hardware"],
   },
   {
@@ -679,24 +677,20 @@ const TESTING_STATUSES = ["IT Testing", "Ready for Demo", "User Testing"];
 
 // ─── CATALOG HELPERS ─────────────────────────────────────────────────────────
 function parseCatalog(items) {
-  const itIncident = {};
-  const itService = {};
-  const hr = {};
-
+  const itIncident = {},
+    itService = {},
+    hr = {};
   for (const item of items) {
     const { parentName, category, subCategory, reqType } = item;
-
     let bucket;
     if (reqType === "IT Incident") bucket = itIncident;
     else if (reqType === "IT Service") bucket = itService;
     else if (reqType === "HR") bucket = hr;
     else continue;
-
     if (!bucket[parentName]) bucket[parentName] = {};
     if (!bucket[parentName][category]) bucket[parentName][category] = [];
     if (subCategory) bucket[parentName][category].push(subCategory);
   }
-
   const toTree = (bucket) =>
     Object.entries(bucket).map(([parentName, cats]) => ({
       parentName,
@@ -705,7 +699,6 @@ function parseCatalog(items) {
         subCategories,
       })),
     }));
-
   return {
     itIncident: toTree(itIncident),
     itService: toTree(itService),
@@ -713,21 +706,6 @@ function parseCatalog(items) {
   };
 }
 
-// ─── NESTED CATALOG DROPDOWN ──────────────────────────────────────────────────
-/**
- * A cascading dropdown: category → sub-category → item.
- * For IT: filters the full combined tree (itIncident + itService) by the
- * selected mainCategoryKey. For HR: shows the full hr tree.
- *
- * Props:
- *   tree          — flat array of { parentName, categories:[{name, subCategories}] }
- *   value         — { parentName, categoryName, subCategory }
- *   onChange      — fn(value)
- *   loading       — bool
- *   accentColor   — tailwind color name for highlights (default "slate")
- */
-// ─── CATALOG CATEGORY DERIVER ────────────────────────────────────────────────
-// Maps API parentName + categoryName → internal category key for status flow
 function deriveCategory(parentName, categoryName) {
   const p = (parentName || "").toLowerCase();
   const c = (categoryName || "").toLowerCase();
@@ -738,10 +716,413 @@ function deriveCategory(parentName, categoryName) {
   return "software";
 }
 
+// ─── EXCEL UTILITIES ─────────────────────────────────────────────────────────
+const safeSheetName = (name, fallback = "Sheet") => {
+  const cleaned = String(name || fallback)
+    .replace(/[:\\/?*\[\]]/g, " - ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 31);
+  return cleaned || fallback;
+};
+
+const EXCEL_COLUMNS = [
+  "Ticket No",
+  "Org",
+  "Department",
+  "Description",
+  "Category",
+  "Catalog Parent",
+  "Catalog Category",
+  "Catalog Item",
+  "Status",
+  "Priority",
+  "Request Type",
+  "Submitted By",
+  "Emp ID",
+  "Submitted Date",
+  "Start Date",
+  "ETA Date",
+  "ETA Hours",
+  "Assignees",
+  "Remarks",
+  "Attachment",
+];
+
+const EXCEL_COL_WIDTHS = [
+  12, 8, 10, 40, 15, 20, 20, 20, 15, 10, 14, 20, 10, 14, 14, 12, 10, 25, 30, 20,
+];
+
+const CLOSED_COLUMNS = [
+  "Ticket No",
+  "Org",
+  "Department",
+  "Description",
+  "Category",
+  "Catalog Parent",
+  "Catalog Category",
+  "Catalog Item",
+  "Status",
+  "Priority",
+  "Request Type",
+  "Submitted By",
+  "Emp ID",
+  "Submitted Date",
+  "Start Date",
+  "ETA Date",
+  "ETA Hours",
+  "Closing Date",
+  "Closing Note",
+  "Assignees",
+  "Remarks",
+  "Attachment",
+  "Days to Close",
+  "Auto Closed",
+];
+
+const CLOSED_COL_WIDTHS = [
+  12, 8, 10, 40, 15, 20, 20, 20, 10, 10, 14, 20, 10, 14, 14, 12, 10, 14, 35, 25,
+  30, 20, 12, 10,
+];
+
+function ticketToRow(t) {
+  return [
+    t.id,
+    t.org,
+    t.ticketDept === "HR" ? "HR" : "IT",
+    t.description,
+    t.ticketDept === "HR"
+      ? "HR"
+      : getCatMeta(t.category)?.label || t.category || "",
+    t.catalogParent || "",
+    t.catalogCategory || "",
+    t.catalogSubCategory || "",
+    t.status,
+    t.priority || "",
+    t.requestType || "",
+    t.submittedBy,
+    t.submittedByEmpId || "",
+    t.submittedDate || "",
+    t.itStartDate || "",
+    t.etaDate || "",
+    t.etaHours || "",
+    (t.itAssignees || []).join(", "),
+    t.itRemarks || "",
+    t.attachment?.name || "",
+  ];
+}
+
+function ticketToClosedRow(t) {
+  const daysToClose =
+    t.submittedDate && t.closingDate
+      ? daysBetween(t.submittedDate, t.closingDate)
+      : "";
+  return [
+    t.id,
+    t.org,
+    t.ticketDept === "HR" ? "HR" : "IT",
+    t.description,
+    t.ticketDept === "HR"
+      ? "HR"
+      : getCatMeta(t.category)?.label || t.category || "",
+    t.catalogParent || "",
+    t.catalogCategory || "",
+    t.catalogSubCategory || "",
+    t.status,
+    t.priority || "",
+    t.requestType || "",
+    t.submittedBy,
+    t.submittedByEmpId || "",
+    t.submittedDate || "",
+    t.itStartDate || "",
+    t.etaDate || "",
+    t.etaHours || "",
+    t.closingDate || "",
+    t.closingNote || "",
+    (t.itAssignees || []).join(", "),
+    t.itRemarks || "",
+    t.attachment?.name || "",
+    daysToClose,
+    t.autoClosedAfterStrikes ? "Yes" : "No",
+  ];
+}
+
+function buildOngoingWorkbook(tickets, dept) {
+  const deptTickets = tickets.filter(
+    (t) => t.ticketDept === dept && t.status !== "Closed",
+  );
+
+  const openTickets = deptTickets.filter((t) => t.status === "Open");
+  const queueTickets = deptTickets.filter((t) =>
+    ["Queue", "Assigned"].includes(t.status),
+  );
+  const wipTickets = deptTickets.filter((t) =>
+    [
+      "Requirement",
+      "Discussion",
+      "In Progress",
+      "IT Testing",
+      "Ready for Demo",
+      "User Testing",
+      "Waiting for User Input",
+      "On Hold",
+    ].includes(t.status),
+  );
+
+  const wb = XLSX.utils.book_new();
+
+  // Summary sheet
+  const summaryData = [
+    ["Helpdesk Ongoing Tickets Report"],
+    ["Department", dept],
+    ["Generated", new Date().toLocaleString("en-IN")],
+    [],
+    ["Category", "Count"],
+    ["Open (Unassigned)", openTickets.length],
+    ["Queue / Assigned", queueTickets.length],
+    ["Work In Progress", wipTickets.length],
+    ["Total Ongoing", deptTickets.length],
+  ];
+  const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
+  summaryWs["!cols"] = [{ wch: 28 }, { wch: 14 }];
+  XLSX.utils.book_append_sheet(wb, summaryWs, safeSheetName("Summary"));
+
+  // Open sheet
+  const openData = [EXCEL_COLUMNS, ...openTickets.map(ticketToRow)];
+  const openWs = XLSX.utils.aoa_to_sheet(openData);
+  openWs["!cols"] = EXCEL_COL_WIDTHS.map((w) => ({ wch: w }));
+  XLSX.utils.book_append_sheet(wb, openWs, safeSheetName("Open"));
+
+  // Queue sheet
+  const queueData = [EXCEL_COLUMNS, ...queueTickets.map(ticketToRow)];
+  const queueWs = XLSX.utils.aoa_to_sheet(queueData);
+  queueWs["!cols"] = EXCEL_COL_WIDTHS.map((w) => ({ wch: w }));
+  XLSX.utils.book_append_sheet(wb, queueWs, safeSheetName("Queue"));
+
+  // Work In Progress sheet
+  const wipData = [EXCEL_COLUMNS, ...wipTickets.map(ticketToRow)];
+  const wipWs = XLSX.utils.aoa_to_sheet(wipData);
+  wipWs["!cols"] = EXCEL_COL_WIDTHS.map((w) => ({ wch: w }));
+  XLSX.utils.book_append_sheet(wb, wipWs, safeSheetName("Work In Progress"));
+
+  return wb;
+}
+
+function buildClosedWorkbook(tickets, dept, from, to) {
+  const deptTickets = tickets.filter((t) => {
+    if (t.ticketDept !== dept || t.status !== "Closed") return false;
+    const d = t.submittedDate || "";
+    return d >= from && d <= to;
+  });
+
+  const wb = XLSX.utils.book_new();
+
+  const avgDays = deptTickets.length
+    ? (
+        deptTickets.reduce((acc, t) => {
+          if (t.submittedDate && t.closingDate)
+            return acc + daysBetween(t.submittedDate, t.closingDate);
+          return acc;
+        }, 0) / deptTickets.length
+      ).toFixed(1)
+    : "N/A";
+
+  const summaryData = [
+    ["Helpdesk Closed Tickets Report"],
+    [`Department: ${dept}`],
+    [`Date Range: ${from} to ${to}`],
+    [`Generated: ${new Date().toLocaleString("en-IN")}`],
+    [],
+    ["Total Closed", deptTickets.length],
+    ["Auto Closed", deptTickets.filter((t) => t.autoClosedAfterStrikes).length],
+    ["Avg Days to Close", avgDays],
+  ];
+  const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
+  summaryWs["!cols"] = [{ wch: 28 }, { wch: 14 }];
+  XLSX.utils.book_append_sheet(wb, summaryWs, safeSheetName("Summary"));
+
+  const data = [CLOSED_COLUMNS, ...deptTickets.map(ticketToClosedRow)];
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  ws["!cols"] = CLOSED_COL_WIDTHS.map((w) => ({ wch: w }));
+  XLSX.utils.book_append_sheet(wb, ws, safeSheetName("Closed Tickets"));
+
+  return wb;
+}
+
+// ─── EXCEL DOWNLOAD MODAL ─────────────────────────────────────────────────────
+function ExcelDownloadModal({ onClose, tickets, dept }) {
+  const [mode, setMode] = useState(null); // "ongoing" | "closed"
+  const [fromDate, setFrom] = useState("");
+  const [toDate, setTo] = useState(todayISO());
+  const [error, setError] = useState("");
+
+  const handleDownload = () => {
+    setError("");
+    if (mode === "ongoing") {
+      const wb = buildOngoingWorkbook(tickets, dept);
+      XLSX.writeFile(wb, `Helpdesk_${dept}_Ongoing_${todayISO()}.xlsx`);
+      onClose();
+    } else if (mode === "closed") {
+      if (!fromDate) {
+        setError("Please select a start date.");
+        return;
+      }
+      if (fromDate > toDate) {
+        setError("Start date must be before end date.");
+        return;
+      }
+      const wb = buildClosedWorkbook(tickets, dept, fromDate, toDate);
+      XLSX.writeFile(
+        wb,
+        `Helpdesk_${dept}_Closed_${fromDate}_to_${toDate}.xlsx`,
+      );
+      onClose();
+    }
+  };
+
+  return (
+    <div
+      className="modal-overlay"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="mini-modal p-6" style={{ maxWidth: "440px" }}>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+              <Download className="w-4 h-4 text-slate-700" />
+              Download Excel Report
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {dept} Helpdesk · Select report type
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Report type selection */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          {[
+            {
+              key: "ongoing",
+              label: "Ongoing Tickets",
+              desc: "Open, Queue, Work In Progress",
+              icon: "🔄",
+              active: "border-blue-500 bg-blue-50 ring-2 ring-blue-100",
+              idle: "border-slate-200 bg-white hover:border-slate-300",
+            },
+            {
+              key: "closed",
+              label: "Closed Tickets",
+              desc: "Select date range",
+              icon: "✅",
+              active:
+                "border-emerald-500 bg-emerald-50 ring-2 ring-emerald-100",
+              idle: "border-slate-200 bg-white hover:border-slate-300",
+            },
+          ].map((opt) => (
+            <button
+              key={opt.key}
+              onClick={() => {
+                setMode(opt.key);
+                setError("");
+              }}
+              className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 text-center transition-all ${mode === opt.key ? opt.active : opt.idle}`}
+            >
+              <span className="text-2xl">{opt.icon}</span>
+              <div>
+                <p
+                  className={`text-sm font-bold ${mode === opt.key ? "" : "text-slate-700"}`}
+                >
+                  {opt.label}
+                </p>
+                <p className="text-[11px] text-slate-500 mt-0.5">{opt.desc}</p>
+              </div>
+              {mode === opt.key && (
+                <CheckCircle2 className="w-4 h-4 text-current" />
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Date range for closed */}
+        {mode === "closed" && (
+          <div className="space-y-3 mb-4 p-3 rounded-xl border border-slate-200 bg-slate-50">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500">
+              Date Range (Submitted Date)
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="From">
+                <input
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => setFrom(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm focus:outline-none focus:border-emerald-400"
+                />
+              </Field>
+              <Field label="To">
+                <input
+                  type="date"
+                  value={toDate}
+                  max={todayISO()}
+                  onChange={(e) => setTo(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm focus:outline-none focus:border-emerald-400"
+                />
+              </Field>
+            </div>
+          </div>
+        )}
+
+        {/* Ongoing description */}
+        {mode === "ongoing" && (
+          <div className="mb-4 p-3 rounded-xl border border-blue-100 bg-blue-50/50 text-xs text-blue-700">
+            <p className="font-bold mb-1.5">Includes 4 sheets:</p>
+            <p className="mb-1">
+              📋 <b>Summary</b> — Ticket counts overview
+            </p>
+            <p className="mb-1">
+              📥 <b>Open</b> — Unassigned / newly raised tickets
+            </p>
+            <p className="mb-1">
+              🗂️ <b>Queue</b> — Assigned & queued tickets
+            </p>
+            <p>
+              ⚙️ <b>Work In Progress</b> — All active tickets (In Progress,
+              Testing, On Hold, Waiting etc.)
+            </p>
+          </div>
+        )}
+
+        {error && (
+          <p className="mb-3 text-xs text-red-600 font-semibold">{error}</p>
+        )}
+
+        <div className="flex gap-2">
+          <button
+            onClick={onClose}
+            className="flex-1 h-10 rounded-xl border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleDownload}
+            disabled={!mode}
+            className={`flex-1 h-10 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 disabled:opacity-40 ${dept === "HR" ? "bg-indigo-600 hover:bg-indigo-700" : "bg-slate-900 hover:bg-slate-800"}`}
+          >
+            <Download className="w-4 h-4" />
+            Download
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── NESTED CATALOG DROPDOWN ──────────────────────────────────────────────────
-// Rules:
-//  • If parentName === categoryName → root node: skip sub-type level, show items directly
-//  • "Text Box" sub-categories → filtered out (description textarea handles free text)
 function NestedCatalogDropdown({
   tree,
   value,
@@ -752,9 +1133,9 @@ function NestedCatalogDropdown({
   const [catOpen, setCatOpen] = useState(false);
   const [subOpen, setSubOpen] = useState(false);
   const [itemOpen, setItemOpen] = useState(false);
-  const catRef = useRef(null);
-  const subRef = useRef(null);
-  const itemRef = useRef(null);
+  const catRef = useRef(null),
+    subRef = useRef(null),
+    itemRef = useRef(null);
 
   useEffect(() => {
     const handler = (e) => {
@@ -786,11 +1167,9 @@ function NestedCatalogDropdown({
   if (loading)
     return (
       <div className="flex items-center gap-2 text-sm text-slate-400 py-3">
-        <Loader2 className="w-4 h-4 animate-spin" />
-        Loading catalog…
+        <Loader2 className="w-4 h-4 animate-spin" /> Loading catalog…
       </div>
     );
-
   if (!tree.length)
     return (
       <div className="text-xs text-slate-400 py-2 italic">
@@ -801,16 +1180,11 @@ function NestedCatalogDropdown({
   const allParents = tree.map((p) => p.parentName);
   const selectedParentObj = tree.find((p) => p.parentName === value.parentName);
   const allCategories = selectedParentObj?.categories || [];
-
-  // Root mode: parentName === sole category name (e.g. Attendance → Attendance)
   const isRootMode =
     allCategories.length === 1 && allCategories[0].name === value.parentName;
-
   const selectedCatObj = isRootMode
     ? allCategories[0]
     : allCategories.find((c) => c.name === value.categoryName);
-
-  // Filter out "Text Box" — free text is handled by the description textarea
   const allSubCats = (selectedCatObj?.subCategories || []).filter(
     (s) => s !== "Text Box",
   );
@@ -819,17 +1193,12 @@ function NestedCatalogDropdown({
     const parentObj = tree.find((x) => x.parentName === p);
     const cats = parentObj?.categories || [];
     const isRoot = cats.length === 1 && cats[0].name === p;
-    onChange({
-      parentName: p,
-      categoryName: isRoot ? p : "",
-      subCategory: "",
-    });
+    onChange({ parentName: p, categoryName: isRoot ? p : "", subCategory: "" });
     setCatOpen(false);
   };
 
   return (
     <div className="space-y-2">
-      {/* Level 1: Parent category */}
       <div ref={catRef} className="relative">
         <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
           Category
@@ -875,7 +1244,6 @@ function NestedCatalogDropdown({
         )}
       </div>
 
-      {/* Level 2: Sub-type — only when NOT root mode */}
       {value.parentName && !isRootMode && allCategories.length > 0 && (
         <div ref={subRef} className="relative">
           <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
@@ -941,7 +1309,6 @@ function NestedCatalogDropdown({
         </div>
       )}
 
-      {/* Level 3: Specific item — when sub-cats exist after filtering Text Box */}
       {(value.categoryName || (isRootMode && value.parentName)) &&
         allSubCats.length > 0 && (
           <div ref={itemRef} className="relative">
@@ -999,7 +1366,6 @@ function NestedCatalogDropdown({
           </div>
         )}
 
-      {/* Breadcrumb */}
       {value.parentName && (
         <div className="flex items-center gap-1 flex-wrap pt-1">
           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
@@ -1036,10 +1402,6 @@ function NestedCatalogDropdown({
 }
 
 // ─── IT CREATE MODAL ──────────────────────────────────────────────────────────
-// Flow:
-//   1. Request Type (Service Request / Incident) → determines which API bucket to show
-//   2. Catalog dropdown (purely from API, no hardcoded category cards)
-//   3. Description, ticket type, on-behalf-of, attachment
 function CreateITModal({
   catalogTree,
   catalogLoading,
@@ -1049,7 +1411,6 @@ function CreateITModal({
   onSubmit,
 }) {
   const fileRef = useRef(null);
-
   const [form, setForm] = useState({
     requestType: "Service Request",
     catalogValue: { parentName: "", categoryName: "", subCategory: "" },
@@ -1068,7 +1429,6 @@ function CreateITModal({
     return (b / 1048576).toFixed(1) + "MB";
   };
 
-  // Switching request type resets catalog selection
   const selectRequestType = (rt) => {
     setForm((p) => ({
       ...p,
@@ -1078,12 +1438,13 @@ function CreateITModal({
     setErrors({});
   };
 
-  // The catalog tree shown is purely determined by request type
-  const activeCatalogTree = useMemo(() => {
-    return form.requestType === "Incident"
-      ? catalogTree.itIncident || []
-      : catalogTree.itService || [];
-  }, [form.requestType, catalogTree]);
+  const activeCatalogTree = useMemo(
+    () =>
+      form.requestType === "Incident"
+        ? catalogTree.itIncident || []
+        : catalogTree.itService || [],
+    [form.requestType, catalogTree],
+  );
 
   const validate = () => {
     const errs = {};
@@ -1101,7 +1462,6 @@ function CreateITModal({
     const fi = form.attachment
       ? { name: form.attachment.name, size: fmt_bytes(form.attachment.size) }
       : null;
-    // Derive internal category from catalog selection for status flow
     const category = deriveCategory(
       form.catalogValue.parentName,
       form.catalogValue.categoryName,
@@ -1130,7 +1490,6 @@ function CreateITModal({
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div className="modal-box" style={{ maxWidth: "540px" }}>
-        {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 flex-none">
           <div>
             <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
@@ -1142,8 +1501,6 @@ function CreateITModal({
               <span className="font-bold text-slate-700">
                 {currentUser.name}
               </span>{" "}
-              ·{" "}
-              {/* <span className="mono text-slate-500">#{currentUser.empId}</span>{" "} */}
               ·{" "}
               <span
                 className={`font-bold px-1.5 rounded-full text-[10px] ${ORG_PILL[currentUser.org]}`}
@@ -1161,7 +1518,6 @@ function CreateITModal({
         </div>
 
         <div className="overflow-y-auto thin-scroll flex-1 p-6 space-y-5">
-          {/* ── STEP 1: Request Type ── */}
           <div>
             <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2">
               Request Type
@@ -1225,7 +1581,6 @@ function CreateITModal({
             </div>
           </div>
 
-          {/* ── STEP 2: Catalog — directly from API filtered by request type ── */}
           <div>
             <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2">
               Select Category
@@ -1246,7 +1601,6 @@ function CreateITModal({
             )}
           </div>
 
-          {/* ── Ticket type (Ticket / Linked) ── */}
           <Field label="Ticket Type">
             <div className="grid grid-cols-2 gap-2">
               {["Ticket", "Linked Ticket"].map((type) => (
@@ -1292,7 +1646,6 @@ function CreateITModal({
             </Field>
           )}
 
-          {/* ── Description ── */}
           <Field
             label="Description / Request Details"
             error={errors.description}
@@ -1308,7 +1661,6 @@ function CreateITModal({
             />
           </Field>
 
-          {/* ── On Behalf Of ── */}
           {currentUser.role !== "User" && (
             <Field label="On Behalf Of (optional)">
               <OnBehalfOfDropdown
@@ -1319,7 +1671,6 @@ function CreateITModal({
             </Field>
           )}
 
-          {/* ── Attachment ── */}
           <Field label="Attachment (optional)">
             <div
               onClick={() => fileRef.current?.click()}
@@ -1372,7 +1723,6 @@ function CreateITModal({
           </Field>
         </div>
 
-        {/* Footer */}
         <div className="flex-none border-t border-slate-100 px-6 py-4 flex items-center justify-between gap-3">
           <p className="text-xs text-slate-400">
             Submitted as{" "}
@@ -2036,7 +2386,6 @@ function LoginScreen({ onLogin }) {
             "0 32px 80px rgba(0,0,0,0.55),0 0 0 1px rgba(255,255,255,0.06)",
         }}
       >
-        {/* LEFT panel */}
         <div
           className="login-image-panel"
           style={{
@@ -2062,18 +2411,6 @@ function LoginScreen({ onLogin }) {
           />
           <div
             style={{
-              position: "absolute",
-              bottom: "-60px",
-              left: "-60px",
-              width: 240,
-              height: 240,
-              borderRadius: "50%",
-              background:
-                "radial-gradient(circle,rgba(87,137,160,0.12) 0%,transparent 70%)",
-            }}
-          />
-          <div
-            style={{
               position: "relative",
               zIndex: 2,
               padding: "28px 28px 0",
@@ -2092,10 +2429,7 @@ function LoginScreen({ onLogin }) {
                 justifyContent: "center",
                 boxShadow: "0 8px 20px rgba(87,137,160,0.35)",
               }}
-            >
-              {/* <img src={IndefLogo} /> */}
-            </div>
-            <div></div>
+            ></div>
           </div>
           <div
             style={{ position: "relative", zIndex: 2, padding: "0 28px 18px" }}
@@ -2146,7 +2480,6 @@ function LoginScreen({ onLogin }) {
             </h2>
           </div>
         </div>
-        {/* RIGHT panel */}
         <div
           style={{
             flex: 1,
@@ -2831,411 +3164,6 @@ function TicketCard({ ticket, active, onClick, currentUser }) {
   );
 }
 
-// ─── IT CREATE MODAL ──────────────────────────────────────────────────────────
-// function CreateITModal({
-//   catalogTree,
-//   catalogLoading,
-//   closedTickets,
-//   currentUser,
-//   onClose,
-//   onSubmit,
-// }) {
-//   const fileRef = useRef(null);
-
-//   const [form, setForm] = useState({
-//     // Step 1: which main category card is selected
-//     mainCategory: "", // "hardware" | "networking" | "software" | "erp"
-//     // Step 2: nested catalog selection within that main category
-//     catalogValue: { parentName: "", categoryName: "", subCategory: "" },
-//     // IT category derived from mainCategory
-//     category: "software",
-//     type: "Ticket",
-//     parentId: "",
-//     description: "",
-//     onBehalfOf: "",
-//     attachment: null,
-//     requestType: "Service Request",
-//   });
-//   const [errors, setErrors] = useState({});
-
-//   const fmt_bytes = (b) => {
-//     if (!b) return "";
-//     if (b < 1024) return b + "B";
-//     if (b < 1048576) return (b / 1024).toFixed(1) + "KB";
-//     return (b / 1048576).toFixed(1) + "MB";
-//   };
-
-//   // When mainCategory changes, reset catalog selection and derive IT category
-//   const selectMainCategory = (key) => {
-//     setForm((p) => ({
-//       ...p,
-//       mainCategory: key,
-//       category: key,
-//       catalogValue: { parentName: "", categoryName: "", subCategory: "" },
-//     }));
-//     setErrors((e) => ({ ...e, mainCategory: undefined, catalog: undefined }));
-//   };
-
-//   // Filter catalogTree to only show entries relevant to the selected main category
-//   const filteredCatalogTree = useMemo(() => {
-//     if (!form.mainCategory) return [];
-//     const meta = IT_MAIN_CATEGORIES.find((c) => c.key === form.mainCategory);
-//     if (!meta) return [];
-//     const keywords = meta.keywords;
-//     // Combine IT Service + IT Incident trees, filter by keywords
-//     const combined = [
-//       ...(catalogTree.itService || []),
-//       ...(catalogTree.itIncident || []),
-//     ];
-//     // Deduplicate by parentName
-//     const seen = new Set();
-//     const deduped = combined.filter((p) => {
-//       if (seen.has(p.parentName)) return false;
-//       seen.add(p.parentName);
-//       return true;
-//     });
-//     // Filter: parent name or any category name must match a keyword
-//     const filtered = deduped.filter((p) => {
-//       const pLower = p.parentName.toLowerCase();
-//       if (keywords.some((k) => pLower.includes(k))) return true;
-//       return p.categories.some((c) =>
-//         keywords.some((k) => c.name.toLowerCase().includes(k)),
-//       );
-//     });
-//     // If no filtered results, show everything (fallback so user isn't stuck)
-//     return filtered.length > 0 ? filtered : deduped;
-//   }, [form.mainCategory, catalogTree]);
-
-//   const validate = () => {
-//     const errs = {};
-//     if (!form.mainCategory)
-//       errs.mainCategory = "Please select a category type.";
-//     if (!form.catalogValue.parentName)
-//       errs.catalog = "Please select a specific category.";
-//     if (!form.description.trim()) errs.description = "Description required.";
-//     if (form.type === "Linked Ticket" && !form.parentId)
-//       errs.parentId = "Parent ticket required.";
-//     setErrors(errs);
-//     return !Object.keys(errs).length;
-//   };
-
-//   const handleSubmit = () => {
-//     if (!validate()) return;
-//     const fi = form.attachment
-//       ? { name: form.attachment.name, size: fmt_bytes(form.attachment.size) }
-//       : null;
-//     onSubmit({
-//       ticketDept: "IT",
-//       description: form.description.trim(),
-//       category: form.category,
-//       requestType: form.requestType,
-//       impact: "user", // default, no longer shown to user
-//       softwareProject: null,
-//       type: form.type,
-//       parentId: form.type === "Linked Ticket" ? Number(form.parentId) : null,
-//       onBehalfOf: form.onBehalfOf,
-//       attachment: fi,
-//       priority: null,
-//       catalogParent: form.catalogValue.parentName,
-//       catalogCategory: form.catalogValue.categoryName,
-//       catalogSubCategory: form.catalogValue.subCategory,
-//     });
-//   };
-
-//   return (
-//     <div
-//       className="modal-overlay"
-//       onClick={(e) => e.target === e.currentTarget && onClose()}
-//     >
-//       <div className="modal-box" style={{ maxWidth: "580px" }}>
-//         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 flex-none">
-//           <div>
-//             <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-//               <Wrench className="w-4 h-4 text-slate-700" />
-//               Raise IT Ticket
-//             </h2>
-//             <p className="text-xs text-slate-500 mt-0.5">
-//               Submitting as{" "}
-//               <span className="font-bold text-slate-700">
-//                 {currentUser.name}
-//               </span>{" "}
-//               ·{" "}
-//               <span className="mono text-slate-500">#{currentUser.empId}</span>{" "}
-//               ·{" "}
-//               <span
-//                 className={`font-bold px-1.5 rounded-full text-[10px] ${ORG_PILL[currentUser.org]}`}
-//               >
-//                 {currentUser.org}
-//               </span>
-//             </p>
-//           </div>
-//           <button
-//             onClick={onClose}
-//             className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"
-//           >
-//             <X className="w-4 h-4" />
-//           </button>
-//         </div>
-
-//         <div className="overflow-y-auto thin-scroll flex-1 p-6 space-y-5">
-//           {/* ── STEP 1: Main Category Cards ── */}
-//           <div>
-//             <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2">
-//               What type of issue is this?
-//             </label>
-//             <div className="grid grid-cols-2 gap-2">
-//               {IT_MAIN_CATEGORIES.map((cat) => {
-//                 const CatIcon = cat.Icon;
-//                 const colors = MAIN_CAT_COLORS[cat.color];
-//                 const isSelected = form.mainCategory === cat.key;
-//                 return (
-//                   <button
-//                     key={cat.key}
-//                     type="button"
-//                     onClick={() => selectMainCategory(cat.key)}
-//                     className={`flex items-start gap-3 p-3.5 rounded-xl border-2 text-left transition-all ${isSelected ? colors.active : colors.card + " border-transparent"}`}
-//                   >
-//                     <div className={`flex-none mt-0.5 ${colors.icon}`}>
-//                       <CatIcon className="w-5 h-5" />
-//                     </div>
-//                     <div className="min-w-0">
-//                       <p
-//                         className={`text-sm font-bold leading-tight ${isSelected ? colors.label : "text-slate-800"}`}
-//                       >
-//                         {cat.label}
-//                       </p>
-//                       <p
-//                         className={`text-[11px] mt-0.5 leading-tight ${isSelected ? colors.desc : "text-slate-500"}`}
-//                       >
-//                         {cat.desc}
-//                       </p>
-//                     </div>
-//                     {isSelected && (
-//                       <CheckCircle2
-//                         className={`w-4 h-4 flex-none ml-auto ${colors.icon}`}
-//                       />
-//                     )}
-//                   </button>
-//                 );
-//               })}
-//             </div>
-//             {errors.mainCategory && (
-//               <p className="mt-1.5 text-xs text-red-600 font-semibold">
-//                 {errors.mainCategory}
-//               </p>
-//             )}
-//           </div>
-
-//           {/* ── STEP 2: Nested Catalog Dropdown — only shown after main category is picked ── */}
-//           {form.mainCategory && (
-//             <div>
-//               <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2">
-//                 Specify the issue
-//               </label>
-//               <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-3">
-//                 <NestedCatalogDropdown
-//                   tree={filteredCatalogTree}
-//                   value={form.catalogValue}
-//                   onChange={(v) => setForm((p) => ({ ...p, catalogValue: v }))}
-//                   loading={catalogLoading}
-//                   accentColor="slate"
-//                 />
-//               </div>
-//               {errors.catalog && (
-//                 <p className="mt-1.5 text-xs text-red-600 font-semibold">
-//                   {errors.catalog}
-//                 </p>
-//               )}
-//             </div>
-//           )}
-
-//           {/* ── Request Type — kept for IT as Incident flag matters for SLA ── */}
-//           {form.mainCategory && (
-//             <Field label="Request Type">
-//               <div className="grid grid-cols-2 gap-2">
-//                 {REQUEST_TYPES.map((rt) => (
-//                   <button
-//                     key={rt}
-//                     type="button"
-//                     onClick={() => setForm((p) => ({ ...p, requestType: rt }))}
-//                     className={`h-10 rounded-xl border text-sm font-bold transition-colors ${
-//                       form.requestType === rt
-//                         ? rt === "Incident"
-//                           ? "bg-red-600 text-white border-red-600"
-//                           : "bg-sky-600 text-white border-sky-600"
-//                         : rt === "Incident"
-//                           ? "border-red-200 text-red-700 hover:bg-red-50"
-//                           : "border-sky-200 text-sky-700 hover:bg-sky-50"
-//                     }`}
-//                   >
-//                     {rt}
-//                   </button>
-//                 ))}
-//               </div>
-//             </Field>
-//           )}
-
-//           {/* ── Ticket type (Ticket/Linked) ── */}
-//           {form.mainCategory && (
-//             <Field label="Ticket Type">
-//               <div className="grid grid-cols-2 gap-2">
-//                 {["Ticket", "Linked Ticket"].map((type) => (
-//                   <button
-//                     key={type}
-//                     type="button"
-//                     onClick={() =>
-//                       setForm((p) => ({
-//                         ...p,
-//                         type,
-//                         parentId: type === "Linked Ticket" ? p.parentId : "",
-//                       }))
-//                     }
-//                     className={`h-10 rounded-xl border text-sm font-bold transition-colors ${form.type === type ? "bg-slate-900 text-white border-slate-900" : "border-slate-300 text-slate-600 hover:bg-slate-50"}`}
-//                   >
-//                     {type}
-//                   </button>
-//                 ))}
-//               </div>
-//             </Field>
-//           )}
-
-//           {form.type === "Linked Ticket" && (
-//             <Field label="Link to Closed Ticket" error={errors.parentId}>
-//               <div className="relative">
-//                 <select
-//                   value={form.parentId}
-//                   onChange={(e) =>
-//                     setForm((p) => ({ ...p, parentId: e.target.value }))
-//                   }
-//                   className="h-10 w-full appearance-none rounded-xl border border-slate-300 bg-white px-3 text-sm focus:outline-none focus:border-slate-400"
-//                 >
-//                   <option value="">Select closed ticket</option>
-//                   {closedTickets
-//                     .filter((t) => t.ticketDept === "IT")
-//                     .map((t) => (
-//                       <option key={t.id} value={t.id}>
-//                         #{t.id} — {t.description}
-//                       </option>
-//                     ))}
-//                 </select>
-//                 <ChevronDown className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-slate-400" />
-//               </div>
-//             </Field>
-//           )}
-
-//           {/* ── Description ── */}
-//           {form.mainCategory && (
-//             <Field
-//               label="Description / Request Details"
-//               error={errors.description}
-//             >
-//               <textarea
-//                 rows={3}
-//                 value={form.description}
-//                 onChange={(e) =>
-//                   setForm((p) => ({ ...p, description: e.target.value }))
-//                 }
-//                 placeholder="Clearly describe the request, affected system, scope, and urgency."
-//                 className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:outline-none focus:border-slate-400 resize-none"
-//               />
-//             </Field>
-//           )}
-
-//           {/* ── On Behalf Of ── */}
-//           {form.mainCategory && currentUser.role !== "User" && (
-//             <Field label="On Behalf Of (optional)">
-//               <OnBehalfOfDropdown
-//                 value={form.onBehalfOf}
-//                 onChange={(v) => setForm((p) => ({ ...p, onBehalfOf: v }))}
-//                 currentUserId={currentUser.id}
-//               />
-//             </Field>
-//           )}
-
-//           {/* ── Attachment ── */}
-//           {form.mainCategory && (
-//             <Field label="Attachment (optional)">
-//               <div
-//                 onClick={() => fileRef.current?.click()}
-//                 className={`flex items-center gap-3 rounded-xl border-2 border-dashed cursor-pointer px-4 py-3 transition-all ${form.attachment ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white"}`}
-//               >
-//                 <Paperclip
-//                   className={`w-4 h-4 flex-none ${form.attachment ? "text-blue-500" : "text-slate-400"}`}
-//                 />
-//                 {form.attachment ? (
-//                   <div className="flex-1 min-w-0">
-//                     <p className="text-sm font-bold text-blue-700 truncate">
-//                       {form.attachment.name}
-//                     </p>
-//                     <p className="text-xs text-blue-400 mono">
-//                       {(form.attachment.size / 1024).toFixed(1)} KB
-//                     </p>
-//                   </div>
-//                 ) : (
-//                   <div>
-//                     <p className="text-sm font-semibold text-slate-600">
-//                       Click to attach
-//                     </p>
-//                     <p className="text-xs text-slate-400 mt-0.5">
-//                       PDF, DOCX, XLSX, images
-//                     </p>
-//                   </div>
-//                 )}
-//                 {form.attachment && (
-//                   <button
-//                     onClick={(e) => {
-//                       e.stopPropagation();
-//                       setForm((p) => ({ ...p, attachment: null }));
-//                     }}
-//                     className="p-1 rounded text-blue-400 hover:text-blue-600 flex-none"
-//                   >
-//                     <X className="w-3.5 h-3.5" />
-//                   </button>
-//                 )}
-//               </div>
-//               <input
-//                 ref={fileRef}
-//                 type="file"
-//                 className="hidden"
-//                 onChange={(e) => {
-//                   const f = e.target.files?.[0];
-//                   if (f) setForm((p) => ({ ...p, attachment: f }));
-//                 }}
-//                 accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.txt"
-//               />
-//             </Field>
-//           )}
-//         </div>
-
-//         <div className="flex-none border-t border-slate-100 px-6 py-4 flex items-center justify-between gap-3">
-//           <p className="text-xs text-slate-400">
-//             Submitted as{" "}
-//             <span className="font-semibold text-slate-600">
-//               {currentUser.name}
-//             </span>{" "}
-//             · {currentUser.org}
-//           </p>
-//           <div className="flex gap-2">
-//             <button
-//               onClick={onClose}
-//               className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-slate-50"
-//             >
-//               Cancel
-//             </button>
-//             <button
-//               onClick={handleSubmit}
-//               className="h-10 px-5 rounded-xl text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 flex items-center gap-2"
-//             >
-//               <Plus className="w-4 h-4" />
-//               Raise IT Ticket
-//             </button>
-//           </div>
-//         </div>
-//       </div>
-//     </div>
-//   );
-// }
-
 // ─── HR CREATE MODAL ──────────────────────────────────────────────────────────
 function CreateHRModal({
   catalogTree,
@@ -3259,7 +3187,6 @@ function CreateHRModal({
     if (b < 1048576) return (b / 1024).toFixed(1) + "KB";
     return (b / 1048576).toFixed(1) + "MB";
   };
-
   const hrTree = catalogTree.hr || [];
 
   const validate = () => {
@@ -3311,7 +3238,6 @@ function CreateHRModal({
               <span className="font-bold text-indigo-700">
                 {currentUser.name}
               </span>{" "}
-              {/* · <span className="mono">#{currentUser.empId}</span> ·{" "} */}
               <span
                 className={`font-bold px-1.5 rounded-full text-[10px] ${ORG_PILL[currentUser.org]}`}
               >
@@ -3326,9 +3252,7 @@ function CreateHRModal({
             <X className="w-4 h-4" />
           </button>
         </div>
-
         <div className="overflow-y-auto thin-scroll flex-1 p-6 space-y-5">
-          {/* ── HR Category — nested dropdown directly ── */}
           <div>
             <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2">
               Select HR Category
@@ -3348,8 +3272,6 @@ function CreateHRModal({
               </p>
             )}
           </div>
-
-          {/* ── Description ── */}
           <Field
             label="Description / Request Details"
             error={errors.description}
@@ -3364,8 +3286,6 @@ function CreateHRModal({
               className="w-full rounded-xl border border-indigo-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-400 resize-none"
             />
           </Field>
-
-          {/* ── On Behalf Of ── */}
           {currentUser.role !== "User" && (
             <Field label="On Behalf Of (optional)">
               <OnBehalfOfDropdown
@@ -3375,8 +3295,6 @@ function CreateHRModal({
               />
             </Field>
           )}
-
-          {/* ── Attachment ── */}
           <Field label="Attachment (optional)">
             <div
               onClick={() => fileRef.current?.click()}
@@ -3428,7 +3346,6 @@ function CreateHRModal({
             />
           </Field>
         </div>
-
         <div className="flex-none border-t border-indigo-100 px-6 py-4 flex items-center justify-between gap-3 bg-indigo-50/30">
           <p className="text-xs text-indigo-400">
             Submitted as{" "}
@@ -3468,8 +3385,8 @@ export default function App() {
   const [createITOpen, setCreateITOpen] = useState(false);
   const [createHROpen, setCreateHROpen] = useState(false);
   const [orgFilter, setOrgFilter] = useState("IML");
+  const [excelModalOpen, setExcelModalOpen] = useState(false);
 
-  // ── Catalog state ──
   const [catalogRaw, setCatalogRaw] = useState([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogError, setCatalogError] = useState(null);
@@ -3616,20 +3533,16 @@ export default function App() {
             (t) => t.ticketDept === (isIT ? "IT" : "HR") && t.org === orgFilter,
           )
         : tickets;
-
-    // For IT/HR: open/closed are org-wide; in-progress/hold/waiting are mine only
     const mineBase =
       isIT || isHR
         ? base.filter((t) => t.itAssignees?.includes(currentUser?.name))
         : base;
-
     const overdue = mineBase.filter(
       (t) =>
         t.etaDate &&
         t.status !== "Closed" &&
         daysBetween(todayISO(), t.etaDate) < 0,
     ).length;
-
     return {
       total: base.length,
       open: base.filter((t) => t.status === "Open").length,
@@ -4141,8 +4054,6 @@ export default function App() {
         t.status === "In Progress" &&
         t.itAssignees?.includes(currentUser.name),
     );
-    // REPLACE these three in buildITColumns():
-
     const testingCol = visibleTickets.filter(
       (t) =>
         t.enrolledByIT &&
@@ -4442,6 +4353,14 @@ export default function App() {
                     </button>
                   </>
                 )}
+                {/* ── EXCEL EXPORT BUTTON ── */}
+                <button
+                  onClick={() => setExcelModalOpen(true)}
+                  className={`inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-bold border transition-colors ${isHR ? "border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100" : "border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100"}`}
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Export
+                </button>
                 <button
                   onClick={() => setCU(null)}
                   className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-300 px-3 text-sm font-semibold text-slate-600 hover:bg-slate-50"
@@ -4970,6 +4889,15 @@ export default function App() {
           currentUser={currentUser}
           onClose={() => setCreateHROpen(false)}
           onSubmit={createTicket}
+        />
+      )}
+
+      {/* ── EXCEL DOWNLOAD MODAL ── */}
+      {excelModalOpen && (
+        <ExcelDownloadModal
+          onClose={() => setExcelModalOpen(false)}
+          tickets={tickets}
+          dept={isIT ? "IT" : "HR"}
         />
       )}
     </>
