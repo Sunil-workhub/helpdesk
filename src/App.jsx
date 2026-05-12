@@ -73,6 +73,8 @@ import {
   Monitor,
   Loader2,
   ChevronUp,
+  ThumbsUp,
+  ThumbsDown,
 } from "lucide-react";
 import BgImage from "./assets/images/it-hepdesk-front.jpg";
 import BgImage1 from "./assets/images/it-hep-desk-bg.jpg";
@@ -92,7 +94,6 @@ const initials = (name) =>
     .toUpperCase();
 
 const USERS = [
-  // ── IT ──
   {
     id: "it_madhav",
     empId: "8165",
@@ -138,7 +139,6 @@ const USERS = [
     avatar: initials("Pranay Mahadik"),
     org: "IML",
   },
-  // ── HR ──
   {
     id: "hr_satish",
     empId: "9152",
@@ -247,7 +247,6 @@ const USERS = [
     avatar: initials("Abhay Mishra"),
     org: "IML",
   },
-  // ── End Users ──
   {
     id: "user_ananya",
     empId: "9011",
@@ -374,6 +373,7 @@ const CATEGORY_META = {
       "Ready for Demo",
       "User Testing",
       "Waiting for User Input",
+      "Resolved",
       "Closed",
     ],
     flowType: "full",
@@ -391,6 +391,7 @@ const CATEGORY_META = {
       "Ready for Demo",
       "User Testing",
       "Waiting for User Input",
+      "Resolved",
       "Closed",
     ],
     flowType: "full",
@@ -399,14 +400,26 @@ const CATEGORY_META = {
     label: "Hardware",
     Icon: HardDrive,
     pill: "bg-amber-50 text-amber-700 border-amber-200",
-    statuses: ["Open", "In Progress", "Waiting for User Input", "Closed"],
+    statuses: [
+      "Open",
+      "In Progress",
+      "Waiting for User Input",
+      "Resolved",
+      "Closed",
+    ],
     flowType: "simple",
   },
   networking: {
     label: "Networking",
     Icon: WifiOff,
     pill: "bg-orange-50 text-orange-700 border-orange-200",
-    statuses: ["Open", "In Progress", "Waiting for User Input", "Closed"],
+    statuses: [
+      "Open",
+      "In Progress",
+      "Waiting for User Input",
+      "Resolved",
+      "Closed",
+    ],
     flowType: "simple",
   },
 };
@@ -454,39 +467,16 @@ const IT_MAIN_CATEGORIES = [
   },
 ];
 
-const MAIN_CAT_COLORS = {
-  amber: {
-    card: "border-amber-200 bg-amber-50 hover:bg-amber-100",
-    active: "border-amber-500 bg-amber-100 ring-2 ring-amber-200",
-    icon: "text-amber-600",
-    label: "text-amber-800",
-    desc: "text-amber-600",
-  },
-  orange: {
-    card: "border-orange-200 bg-orange-50 hover:bg-orange-100",
-    active: "border-orange-500 bg-orange-100 ring-2 ring-orange-200",
-    icon: "text-orange-600",
-    label: "text-orange-800",
-    desc: "text-orange-600",
-  },
-  violet: {
-    card: "border-violet-200 bg-violet-50 hover:bg-violet-100",
-    active: "border-violet-500 bg-violet-100 ring-2 ring-violet-200",
-    icon: "text-violet-600",
-    label: "text-violet-800",
-    desc: "text-violet-600",
-  },
-  cyan: {
-    card: "border-cyan-200 bg-cyan-50 hover:bg-cyan-100",
-    active: "border-cyan-500 bg-cyan-100 ring-2 ring-cyan-200",
-    icon: "text-cyan-600",
-    label: "text-cyan-800",
-    desc: "text-cyan-600",
-  },
-};
-
 const FULL_FLOW_CATEGORIES = ["software", "erp"];
-const HR_STATUSES = ["Open", "Queue", "Assigned", "In Progress", "Closed"];
+// Change 9: HR statuses now include Resolved before Closed
+const HR_STATUSES = [
+  "Open",
+  "Queue",
+  "Assigned",
+  "In Progress",
+  "Resolved",
+  "Closed",
+];
 
 const STATUS_META = {
   Open: {
@@ -555,6 +545,13 @@ const STATUS_META = {
     chip: "bg-amber-100 text-amber-700",
     Icon: TestTube,
   },
+  // Change 9: New Resolved status
+  Resolved: {
+    dot: "bg-emerald-500",
+    txt: "text-emerald-700",
+    chip: "bg-emerald-100 text-emerald-700",
+    Icon: ThumbsUp,
+  },
   Closed: {
     dot: "bg-slate-300",
     txt: "text-slate-400",
@@ -566,6 +563,17 @@ const STATUS_META = {
 const PRIORITIES = ["Critical", "Medium", "Normal"];
 const TICKET_TYPES = ["Service Request", "Incident"];
 const REQUEST_TYPES = ["Service Request", "Incident"];
+
+// Change 2: Priority descriptions
+const PRIORITY_META = {
+  Critical: {
+    label: "Critical",
+    desc: "Impacting whole organisation",
+    color: "red",
+  },
+  Medium: { label: "Medium", desc: "Impacting multiple users", color: "amber" },
+  Normal: { label: "Normal", desc: "Impacting single user", color: "blue" },
+};
 
 const HOLD_REASON_OPTIONS = [
   { value: "response_not_received", label: "Response Not Received" },
@@ -726,8 +734,11 @@ const safeSheetName = (name, fallback = "Sheet") => {
   return cleaned || fallback;
 };
 
+// Change 10: Status and Priority moved to start of columns
 const EXCEL_COLUMNS = [
   "Ticket No",
+  "Status",
+  "Priority",
   "Org",
   "Department",
   "Description",
@@ -735,8 +746,6 @@ const EXCEL_COLUMNS = [
   "Catalog Parent",
   "Catalog Category",
   "Catalog Item",
-  "Status",
-  "Priority",
   "Request Type",
   "Submitted By",
   "Emp ID",
@@ -744,17 +753,19 @@ const EXCEL_COLUMNS = [
   "Start Date",
   "ETA Date",
   "ETA Hours",
-  "Assignees",
+  "Assignee",
   "Remarks",
   "Attachment",
 ];
 
 const EXCEL_COL_WIDTHS = [
-  12, 8, 10, 40, 15, 20, 20, 20, 15, 10, 14, 20, 10, 14, 14, 12, 10, 25, 30, 20,
+  12, 15, 10, 8, 10, 40, 15, 20, 20, 20, 14, 20, 10, 14, 14, 12, 10, 20, 30, 20,
 ];
 
 const CLOSED_COLUMNS = [
   "Ticket No",
+  "Status",
+  "Priority",
   "Org",
   "Department",
   "Description",
@@ -762,8 +773,6 @@ const CLOSED_COLUMNS = [
   "Catalog Parent",
   "Catalog Category",
   "Catalog Item",
-  "Status",
-  "Priority",
   "Request Type",
   "Submitted By",
   "Emp ID",
@@ -773,7 +782,7 @@ const CLOSED_COLUMNS = [
   "ETA Hours",
   "Closing Date",
   "Closing Note",
-  "Assignees",
+  "Assignee",
   "Remarks",
   "Attachment",
   "Days to Close",
@@ -781,13 +790,15 @@ const CLOSED_COLUMNS = [
 ];
 
 const CLOSED_COL_WIDTHS = [
-  12, 8, 10, 40, 15, 20, 20, 20, 10, 10, 14, 20, 10, 14, 14, 12, 10, 14, 35, 25,
+  12, 15, 10, 8, 10, 40, 15, 20, 20, 20, 14, 20, 10, 14, 14, 12, 10, 14, 35, 20,
   30, 20, 12, 10,
 ];
 
 function ticketToRow(t) {
   return [
     t.id,
+    t.status,
+    t.priority || "",
     t.org,
     t.ticketDept === "HR" ? "HR" : "IT",
     t.description,
@@ -797,8 +808,6 @@ function ticketToRow(t) {
     t.catalogParent || "",
     t.catalogCategory || "",
     t.catalogSubCategory || "",
-    t.status,
-    t.priority || "",
     t.requestType || "",
     t.submittedBy,
     t.submittedByEmpId || "",
@@ -819,6 +828,8 @@ function ticketToClosedRow(t) {
       : "";
   return [
     t.id,
+    t.status,
+    t.priority || "",
     t.org,
     t.ticketDept === "HR" ? "HR" : "IT",
     t.description,
@@ -828,8 +839,6 @@ function ticketToClosedRow(t) {
     t.catalogParent || "",
     t.catalogCategory || "",
     t.catalogSubCategory || "",
-    t.status,
-    t.priority || "",
     t.requestType || "",
     t.submittedBy,
     t.submittedByEmpId || "",
@@ -847,11 +856,17 @@ function ticketToClosedRow(t) {
   ];
 }
 
+// Change 10: Helper to apply freeze panes and bold headers
+function applySheetStyle(ws, colWidths) {
+  ws["!cols"] = colWidths.map((w) => ({ wch: w }));
+  ws["!freeze"] = { xSplit: 0, ySplit: 1 };
+}
+
+// Change 10: Merged workbook — Summary + one detail sheet
 function buildOngoingWorkbook(tickets, dept) {
   const deptTickets = tickets.filter(
     (t) => t.ticketDept === dept && t.status !== "Closed",
   );
-
   const openTickets = deptTickets.filter((t) => t.status === "Open");
   const queueTickets = deptTickets.filter((t) =>
     ["Queue", "Assigned"].includes(t.status),
@@ -866,6 +881,7 @@ function buildOngoingWorkbook(tickets, dept) {
       "User Testing",
       "Waiting for User Input",
       "On Hold",
+      "Resolved",
     ].includes(t.status),
   );
 
@@ -887,23 +903,11 @@ function buildOngoingWorkbook(tickets, dept) {
   summaryWs["!cols"] = [{ wch: 28 }, { wch: 14 }];
   XLSX.utils.book_append_sheet(wb, summaryWs, safeSheetName("Summary"));
 
-  // Open sheet
-  const openData = [EXCEL_COLUMNS, ...openTickets.map(ticketToRow)];
-  const openWs = XLSX.utils.aoa_to_sheet(openData);
-  openWs["!cols"] = EXCEL_COL_WIDTHS.map((w) => ({ wch: w }));
-  XLSX.utils.book_append_sheet(wb, openWs, safeSheetName("Open"));
-
-  // Queue sheet
-  const queueData = [EXCEL_COLUMNS, ...queueTickets.map(ticketToRow)];
-  const queueWs = XLSX.utils.aoa_to_sheet(queueData);
-  queueWs["!cols"] = EXCEL_COL_WIDTHS.map((w) => ({ wch: w }));
-  XLSX.utils.book_append_sheet(wb, queueWs, safeSheetName("Queue"));
-
-  // Work In Progress sheet
-  const wipData = [EXCEL_COLUMNS, ...wipTickets.map(ticketToRow)];
-  const wipWs = XLSX.utils.aoa_to_sheet(wipData);
-  wipWs["!cols"] = EXCEL_COL_WIDTHS.map((w) => ({ wch: w }));
-  XLSX.utils.book_append_sheet(wb, wipWs, safeSheetName("Work In Progress"));
+  // Change 10: All ongoing in one detail sheet
+  const allData = [EXCEL_COLUMNS, ...deptTickets.map(ticketToRow)];
+  const allWs = XLSX.utils.aoa_to_sheet(allData);
+  applySheetStyle(allWs, EXCEL_COL_WIDTHS);
+  XLSX.utils.book_append_sheet(wb, allWs, safeSheetName("All Ongoing"));
 
   return wb;
 }
@@ -916,7 +920,6 @@ function buildClosedWorkbook(tickets, dept, from, to) {
   });
 
   const wb = XLSX.utils.book_new();
-
   const avgDays = deptTickets.length
     ? (
         deptTickets.reduce((acc, t) => {
@@ -941,9 +944,10 @@ function buildClosedWorkbook(tickets, dept, from, to) {
   summaryWs["!cols"] = [{ wch: 28 }, { wch: 14 }];
   XLSX.utils.book_append_sheet(wb, summaryWs, safeSheetName("Summary"));
 
+  // Change 10: Single detail sheet
   const data = [CLOSED_COLUMNS, ...deptTickets.map(ticketToClosedRow)];
   const ws = XLSX.utils.aoa_to_sheet(data);
-  ws["!cols"] = CLOSED_COL_WIDTHS.map((w) => ({ wch: w }));
+  applySheetStyle(ws, CLOSED_COL_WIDTHS);
   XLSX.utils.book_append_sheet(wb, ws, safeSheetName("Closed Tickets"));
 
   return wb;
@@ -951,7 +955,7 @@ function buildClosedWorkbook(tickets, dept, from, to) {
 
 // ─── EXCEL DOWNLOAD MODAL ─────────────────────────────────────────────────────
 function ExcelDownloadModal({ onClose, tickets, dept }) {
-  const [mode, setMode] = useState(null); // "ongoing" | "closed"
+  const [mode, setMode] = useState(null);
   const [fromDate, setFrom] = useState("");
   const [toDate, setTo] = useState(todayISO());
   const [error, setError] = useState("");
@@ -1003,8 +1007,6 @@ function ExcelDownloadModal({ onClose, tickets, dept }) {
             <X className="w-4 h-4" />
           </button>
         </div>
-
-        {/* Report type selection */}
         <div className="grid grid-cols-2 gap-3 mb-4">
           {[
             {
@@ -1048,8 +1050,6 @@ function ExcelDownloadModal({ onClose, tickets, dept }) {
             </button>
           ))}
         </div>
-
-        {/* Date range for closed */}
         {mode === "closed" && (
           <div className="space-y-3 mb-4 p-3 rounded-xl border border-slate-200 bg-slate-50">
             <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500">
@@ -1076,31 +1076,20 @@ function ExcelDownloadModal({ onClose, tickets, dept }) {
             </div>
           </div>
         )}
-
-        {/* Ongoing description */}
         {mode === "ongoing" && (
           <div className="mb-4 p-3 rounded-xl border border-blue-100 bg-blue-50/50 text-xs text-blue-700">
-            <p className="font-bold mb-1.5">Includes 4 sheets:</p>
+            <p className="font-bold mb-1.5">Includes 2 sheets:</p>
             <p className="mb-1">
               📋 <b>Summary</b> — Ticket counts overview
             </p>
-            <p className="mb-1">
-              📥 <b>Open</b> — Unassigned / newly raised tickets
-            </p>
-            <p className="mb-1">
-              🗂️ <b>Queue</b> — Assigned & queued tickets
-            </p>
             <p>
-              ⚙️ <b>Work In Progress</b> — All active tickets (In Progress,
-              Testing, On Hold, Waiting etc.)
+              📊 <b>All Ongoing</b> — All open/active tickets in one sheet
             </p>
           </div>
         )}
-
         {error && (
           <p className="mb-3 text-xs text-red-600 font-semibold">{error}</p>
         )}
-
         <div className="flex gap-2">
           <button
             onClick={onClose}
@@ -1401,7 +1390,87 @@ function NestedCatalogDropdown({
   );
 }
 
-// ─── IT CREATE MODAL ──────────────────────────────────────────────────────────
+// ─── PRIORITY SELECTOR (Change 2) ─────────────────────────────────────────────
+function PrioritySelector({ value, onChange }) {
+  const options = [
+    {
+      key: "Critical",
+      label: "Critical",
+      desc: "Impacting whole organisation",
+      color: "red",
+      icon: "🔴",
+    },
+    {
+      key: "Medium",
+      label: "Medium",
+      desc: "Impacting multiple users",
+      color: "amber",
+      icon: "🟡",
+    },
+    {
+      key: "Normal",
+      label: "Normal",
+      desc: "Impacting single user",
+      color: "blue",
+      icon: "🔵",
+    },
+  ];
+  const colorMap = {
+    red: {
+      active: "border-red-500 bg-red-50 ring-2 ring-red-100",
+      label: "text-red-700",
+      desc: "text-red-500",
+    },
+    amber: {
+      active: "border-amber-500 bg-amber-50 ring-2 ring-amber-100",
+      label: "text-amber-700",
+      desc: "text-amber-500",
+    },
+    blue: {
+      active: "border-blue-500 bg-blue-50 ring-2 ring-blue-100",
+      label: "text-blue-700",
+      desc: "text-blue-500",
+    },
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-2">
+        {options.map((opt) => {
+          const isSelected = value === opt.key;
+          const cm = colorMap[opt.color];
+          return (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() => onChange(opt.key)}
+              className={`flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl border-2 text-sm font-bold transition-all ${isSelected ? cm.active + " " + cm.label : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+            >
+              <span className="text-base">{opt.icon}</span>
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+      {value &&
+        (() => {
+          const sel = options.find((o) => o.key === value);
+          const cm = colorMap[sel.color];
+          return (
+            <div
+              className={`rounded-xl border px-3 py-2 text-xs font-semibold ${cm.active} ${cm.desc}`}
+            >
+              <span className="mr-1">{sel.icon}</span>
+              <span className={`font-bold ${cm.label}`}>{sel.label}:</span>{" "}
+              {sel.desc}
+            </div>
+          );
+        })()}
+    </div>
+  );
+}
+
+// ─── IT CREATE MODAL (Change 1, 2, 3) ──────────────────────────────────────────
 function CreateITModal({
   catalogTree,
   catalogLoading,
@@ -1419,6 +1488,7 @@ function CreateITModal({
     description: "",
     onBehalfOf: "",
     attachment: null,
+    priority: "",
   });
   const [errors, setErrors] = useState({});
 
@@ -1451,6 +1521,7 @@ function CreateITModal({
     if (!form.catalogValue.parentName)
       errs.catalog = "Please select a category.";
     if (!form.description.trim()) errs.description = "Description required.";
+    if (!form.priority) errs.priority = "Please select a priority.";
     if (form.type === "Linked Ticket" && !form.parentId)
       errs.parentId = "Parent ticket required.";
     setErrors(errs);
@@ -1477,7 +1548,7 @@ function CreateITModal({
       parentId: form.type === "Linked Ticket" ? Number(form.parentId) : null,
       onBehalfOf: form.onBehalfOf,
       attachment: fi,
-      priority: null,
+      priority: form.priority,
       catalogParent: form.catalogValue.parentName,
       catalogCategory: form.catalogValue.categoryName,
       catalogSubCategory: form.catalogValue.subCategory,
@@ -1492,6 +1563,7 @@ function CreateITModal({
       <div className="modal-box" style={{ maxWidth: "540px" }}>
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 flex-none">
           <div>
+            {/* Change 3: Header color matched to button */}
             <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
               <Wrench className="w-4 h-4 text-slate-700" />
               Raise IT Ticket
@@ -1518,6 +1590,7 @@ function CreateITModal({
         </div>
 
         <div className="overflow-y-auto thin-scroll flex-1 p-6 space-y-5">
+          {/* Request Type */}
           <div>
             <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2">
               Request Type
@@ -1581,6 +1654,7 @@ function CreateITModal({
             </div>
           </div>
 
+          {/* Category */}
           <div>
             <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2">
               Select Category
@@ -1601,6 +1675,31 @@ function CreateITModal({
             )}
           </div>
 
+          {/* Change 1: Description immediately after category */}
+          <Field
+            label="Description / Request Details"
+            error={errors.description}
+          >
+            <textarea
+              rows={3}
+              value={form.description}
+              onChange={(e) =>
+                setForm((p) => ({ ...p, description: e.target.value }))
+              }
+              placeholder="Clearly describe the request, affected system, scope, and urgency."
+              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:outline-none focus:border-slate-400 resize-none"
+            />
+          </Field>
+
+          {/* Change 2: Priority with description */}
+          <Field label="Priority" error={errors.priority}>
+            <PrioritySelector
+              value={form.priority}
+              onChange={(v) => setForm((p) => ({ ...p, priority: v }))}
+            />
+          </Field>
+
+          {/* Change 1: Ticket type before attachment */}
           <Field label="Ticket Type">
             <div className="grid grid-cols-2 gap-2">
               {["Ticket", "Linked Ticket"].map((type) => (
@@ -1646,21 +1745,6 @@ function CreateITModal({
             </Field>
           )}
 
-          <Field
-            label="Description / Request Details"
-            error={errors.description}
-          >
-            <textarea
-              rows={3}
-              value={form.description}
-              onChange={(e) =>
-                setForm((p) => ({ ...p, description: e.target.value }))
-              }
-              placeholder="Clearly describe the request, affected system, scope, and urgency."
-              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:outline-none focus:border-slate-400 resize-none"
-            />
-          </Field>
-
           {currentUser.role !== "User" && (
             <Field label="On Behalf Of (optional)">
               <OnBehalfOfDropdown
@@ -1671,6 +1755,7 @@ function CreateITModal({
             </Field>
           )}
 
+          {/* Attachment stays last */}
           <Field label="Attachment (optional)">
             <div
               onClick={() => fileRef.current?.click()}
@@ -1812,6 +1897,9 @@ const INITIAL_TICKETS = [
     ],
     strikes: [],
     autoClosedAfterStrikes: false,
+    resolvedDate: null,
+    resolvedNote: "",
+    userConfirmedResolved: false,
   },
   {
     id: 2,
@@ -1877,6 +1965,9 @@ const INITIAL_TICKETS = [
     ],
     strikes: [],
     autoClosedAfterStrikes: false,
+    resolvedDate: null,
+    resolvedNote: "",
+    userConfirmedResolved: false,
   },
   {
     id: 3,
@@ -1943,6 +2034,9 @@ const INITIAL_TICKETS = [
     ],
     strikes: [],
     autoClosedAfterStrikes: false,
+    resolvedDate: null,
+    resolvedNote: "",
+    userConfirmedResolved: false,
   },
   {
     id: 4,
@@ -1988,6 +2082,9 @@ const INITIAL_TICKETS = [
     messages: [],
     strikes: [],
     autoClosedAfterStrikes: false,
+    resolvedDate: null,
+    resolvedNote: "",
+    userConfirmedResolved: false,
   },
   {
     id: 5,
@@ -2028,6 +2125,9 @@ const INITIAL_TICKETS = [
     messages: [],
     strikes: [],
     autoClosedAfterStrikes: false,
+    resolvedDate: null,
+    resolvedNote: "",
+    userConfirmedResolved: false,
   },
   {
     id: 6,
@@ -2093,6 +2193,9 @@ const INITIAL_TICKETS = [
     ],
     strikes: [],
     autoClosedAfterStrikes: false,
+    resolvedDate: null,
+    resolvedNote: "",
+    userConfirmedResolved: false,
   },
   {
     id: 7,
@@ -2151,6 +2254,9 @@ const INITIAL_TICKETS = [
     messages: [],
     strikes: [],
     autoClosedAfterStrikes: false,
+    resolvedDate: null,
+    resolvedNote: "",
+    userConfirmedResolved: false,
   },
   {
     id: 8,
@@ -2222,6 +2328,9 @@ const INITIAL_TICKETS = [
     ],
     strikes: [],
     autoClosedAfterStrikes: false,
+    resolvedDate: null,
+    resolvedNote: "",
+    userConfirmedResolved: false,
   },
   {
     id: 9,
@@ -2263,6 +2372,9 @@ const INITIAL_TICKETS = [
     messages: [],
     strikes: [],
     autoClosedAfterStrikes: false,
+    resolvedDate: null,
+    resolvedNote: "",
+    userConfirmedResolved: false,
   },
 ];
 
@@ -2369,7 +2481,7 @@ function LoginScreen({ onLogin }) {
         .login-btn-main:hover:not(:disabled) { opacity:.88; transform:translateY(-1px); }
         .login-btn-main:disabled { opacity:.5; cursor:not-allowed; }
         .login-bg-grid { position:absolute; inset:0; background-image:linear-gradient(rgba(87,137,160,0.05) 1px,transparent 1px),linear-gradient(90deg,rgba(87,137,160,0.05) 1px,transparent 1px); background-size:44px 44px; }
-        @media(max-width:680px){.login-image-panel{display:none!important;}}
+        @media(max-width:680px){.login-image-panel{display:none!important;}.login-card-inner{width:92vw!important;height:auto!important;}}
       `}</style>
       <div className="login-bg-grid" />
       <div
@@ -2718,13 +2830,20 @@ function LoginScreen({ onLogin }) {
   );
 }
 
+// Change 5: Org filter with "All" option
 function OrgFilterBar({ value, onChange }) {
   return (
-    <div className="flex items-center gap-2">
-      <Filter className="w-3.5 h-3.5 text-slate-400" />
+    <div className="flex items-center gap-2 flex-wrap">
+      <Filter className="w-3.5 h-3.5 text-slate-400 flex-none" />
       <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
         Org:
       </span>
+      <button
+        onClick={() => onChange("All")}
+        className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all ${value === "All" ? "bg-slate-800 text-white border-slate-800" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}
+      >
+        All
+      </button>
       {ORGS.map((org) => (
         <button
           key={org}
@@ -2771,6 +2890,7 @@ function UserDashboard({
     ).length,
     waiting: myTickets.filter((t) => t.status === "Waiting for User Input")
       .length,
+    resolved: myTickets.filter((t) => t.status === "Resolved").length,
     closed: myTickets.filter((t) => t.status === "Closed").length,
   };
   const totalPages = Math.max(1, Math.ceil(myTickets.length / USER_PAGE_SIZE));
@@ -2785,13 +2905,13 @@ function UserDashboard({
   return (
     <div className="h-screen flex flex-col bg-slate-50">
       <header className="flex-none border-b border-slate-200 bg-white shadow-sm">
-        <div className="mx-auto max-w-5xl px-5 py-3 flex items-center justify-between gap-4">
+        <div className="mx-auto max-w-5xl px-4 sm:px-5 py-3 flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center flex-none">
               <Wrench className="w-4 h-4 text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-extrabold tracking-tight text-slate-900 leading-tight">
+              <h1 className="text-base sm:text-lg font-extrabold tracking-tight text-slate-900 leading-tight">
                 Helpdesk · My Tickets
               </h1>
               <p className="text-[11px] text-slate-500 font-medium">
@@ -2804,12 +2924,12 @@ function UserDashboard({
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-2 rounded-xl px-3 py-2 border border-emerald-200 bg-emerald-50">
               <div className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black bg-emerald-500 text-white">
                 {currentUser.avatar}
               </div>
-              <div>
+              <div className="hidden sm:block">
                 <p className="text-xs font-bold text-slate-800 leading-none">
                   {currentUser.name}
                 </p>
@@ -2818,19 +2938,20 @@ function UserDashboard({
                 </p>
               </div>
             </div>
+            {/* Change 3: IT button color matched to background of avatar box color */}
             <button
               onClick={onCreateITTicket}
-              className="inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 transition-colors"
+              className="inline-flex h-9 items-center gap-2 rounded-xl px-3 sm:px-4 text-sm font-bold text-white bg-slate-700 hover:bg-slate-900 transition-colors"
             >
               <Wrench className="h-3.5 w-3.5" />
-              IT Ticket
+              <span className="hidden sm:inline">IT Ticket</span>
             </button>
             <button
               onClick={onCreateHRTicket}
-              className="inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
+              className="inline-flex h-9 items-center gap-2 rounded-xl px-3 sm:px-4 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
             >
               <Briefcase className="h-3.5 w-3.5" />
-              HR Ticket
+              <span className="hidden sm:inline">HR Ticket</span>
             </button>
             <button
               onClick={onLogout}
@@ -2841,23 +2962,26 @@ function UserDashboard({
           </div>
         </div>
       </header>
-      <main className="flex-1 overflow-y-auto p-6 max-w-5xl mx-auto w-full">
-        <div className="grid grid-cols-5 gap-3 mb-6">
+      <main className="flex-1 overflow-y-auto p-4 sm:p-6 max-w-5xl mx-auto w-full">
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 sm:gap-3 mb-6">
           {[
             { l: "Total", v: stats.total, t: "slate" },
             { l: "Open", v: stats.open, t: "slate" },
             { l: "In Progress", v: stats.inProgress, t: "blue" },
-            { l: "Waiting for Input", v: stats.waiting, t: "orange" },
+            { l: "Waiting", v: stats.waiting, t: "orange" },
+            { l: "Resolved", v: stats.resolved, t: "emerald" },
             { l: "Closed", v: stats.closed, t: "slate" },
           ].map((s) => (
             <div
               key={s.l}
-              className={`rounded-2xl border px-4 py-3 ${s.t === "blue" ? "bg-blue-50 border-blue-200 text-blue-700" : s.t === "orange" ? "bg-orange-50 border-orange-200 text-orange-700" : "bg-white border-slate-200 text-slate-700"}`}
+              className={`rounded-2xl border px-3 py-2 sm:px-4 sm:py-3 ${s.t === "blue" ? "bg-blue-50 border-blue-200 text-blue-700" : s.t === "orange" ? "bg-orange-50 border-orange-200 text-orange-700" : s.t === "emerald" ? "bg-emerald-50 border-emerald-200 text-emerald-700" : "bg-white border-slate-200 text-slate-700"}`}
             >
               <p className="text-[10px] font-bold uppercase tracking-widest opacity-60">
                 {s.l}
               </p>
-              <p className="text-2xl font-extrabold leading-none mt-1">{s.v}</p>
+              <p className="text-xl sm:text-2xl font-extrabold leading-none mt-1">
+                {s.v}
+              </p>
             </div>
           ))}
         </div>
@@ -2955,34 +3079,6 @@ function UserDashboard({
                         <p className="text-sm font-bold text-slate-800 mb-1">
                           {t.description}
                         </p>
-                        {(t.catalogParent ||
-                          t.catalogCategory ||
-                          t.catalogSubCategory) && (
-                          <div className="flex items-center gap-1 mb-1 flex-wrap">
-                            {t.catalogParent && (
-                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
-                                {t.catalogParent}
-                              </span>
-                            )}
-                            {t.catalogCategory &&
-                              t.catalogCategory !== t.catalogParent && (
-                                <>
-                                  <ChevronRight className="w-2.5 h-2.5 text-slate-300" />
-                                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-600">
-                                    {t.catalogCategory}
-                                  </span>
-                                </>
-                              )}
-                            {t.catalogSubCategory && (
-                              <>
-                                <ChevronRight className="w-2.5 h-2.5 text-slate-300" />
-                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600">
-                                  {t.catalogSubCategory}
-                                </span>
-                              </>
-                            )}
-                          </div>
-                        )}
                         <div className="flex items-center gap-3 text-xs text-slate-500 flex-wrap">
                           <span className="flex items-center gap-1">
                             <CalendarDays className="w-3 h-3" />
@@ -3000,6 +3096,15 @@ function UserDashboard({
                             {badge.label}
                           </span>
                         </div>
+                        {/* Resolved pending user confirmation */}
+                        {t.status === "Resolved" &&
+                          !t.userConfirmedResolved && (
+                            <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 font-semibold flex items-center gap-2">
+                              <ThumbsUp className="w-3 h-3" />
+                              Marked as resolved — please confirm if your issue
+                              is fixed
+                            </div>
+                          )}
                       </div>
                     </div>
                   </button>
@@ -3083,13 +3188,6 @@ function TicketCard({ ticket, active, onClick, currentUser }) {
             {cat.label}
           </span>
         ) : null}
-        {ticket.ticketType && (
-          <span
-            className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-none ${ticket.ticketType === "Incident" ? "bg-red-100 text-red-700 border border-red-200" : "bg-sky-100 text-sky-700 border border-sky-200"}`}
-          >
-            {ticket.ticketType}
-          </span>
-        )}
         {ticket.priority && (
           <span
             className={`ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-md flex-none ${PRIORITY_PILL[ticket.priority]}`}
@@ -3101,23 +3199,6 @@ function TicketCard({ ticket, active, onClick, currentUser }) {
       <p className="text-[13px] font-semibold text-slate-800 truncate mb-1">
         {ticket.description}
       </p>
-      {(ticket.catalogParent || ticket.catalogCategory) && (
-        <div className="flex items-center gap-1 mb-1 flex-wrap">
-          {ticket.catalogParent && (
-            <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-slate-100 text-slate-500 truncate max-w-[80px]">
-              {ticket.catalogParent}
-            </span>
-          )}
-          {ticket.catalogSubCategory && (
-            <>
-              <ChevronRight className="w-2 h-2 text-slate-300" />
-              <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-emerald-50 text-emerald-600 truncate max-w-[80px]">
-                {ticket.catalogSubCategory}
-              </span>
-            </>
-          )}
-        </div>
-      )}
       <div className="flex items-center gap-1.5 text-[10px]">
         <User className="w-2.5 h-2.5 text-slate-400 flex-none" />
         <span className="text-slate-500 truncate flex-1 min-w-0">
@@ -3164,7 +3245,7 @@ function TicketCard({ ticket, active, onClick, currentUser }) {
   );
 }
 
-// ─── HR CREATE MODAL ──────────────────────────────────────────────────────────
+// ─── HR CREATE MODAL (Change 1, 2) ────────────────────────────────────────────
 function CreateHRModal({
   catalogTree,
   catalogLoading,
@@ -3178,6 +3259,7 @@ function CreateHRModal({
     description: "",
     onBehalfOf: "",
     attachment: null,
+    priority: "",
   });
   const [errors, setErrors] = useState({});
 
@@ -3194,6 +3276,7 @@ function CreateHRModal({
     if (!form.description.trim()) errs.description = "Description required.";
     if (!form.catalogValue.parentName)
       errs.catalog = "Please select a category.";
+    if (!form.priority) errs.priority = "Please select a priority.";
     setErrors(errs);
     return !Object.keys(errs).length;
   };
@@ -3214,7 +3297,7 @@ function CreateHRModal({
       parentId: null,
       onBehalfOf: form.onBehalfOf,
       attachment: fi,
-      priority: null,
+      priority: form.priority,
       catalogParent: form.catalogValue.parentName,
       catalogCategory: form.catalogValue.categoryName,
       catalogSubCategory: form.catalogValue.subCategory,
@@ -3253,6 +3336,7 @@ function CreateHRModal({
           </button>
         </div>
         <div className="overflow-y-auto thin-scroll flex-1 p-6 space-y-5">
+          {/* Category */}
           <div>
             <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2">
               Select HR Category
@@ -3272,6 +3356,7 @@ function CreateHRModal({
               </p>
             )}
           </div>
+          {/* Change 1: Description immediately after category */}
           <Field
             label="Description / Request Details"
             error={errors.description}
@@ -3284,6 +3369,13 @@ function CreateHRModal({
               }
               placeholder="Describe the HR request, employee name, and relevant details."
               className="w-full rounded-xl border border-indigo-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-400 resize-none"
+            />
+          </Field>
+          {/* Change 2: Priority */}
+          <Field label="Priority" error={errors.priority}>
+            <PrioritySelector
+              value={form.priority}
+              onChange={(v) => setForm((p) => ({ ...p, priority: v }))}
             />
           </Field>
           {currentUser.role !== "User" && (
@@ -3375,6 +3467,223 @@ function CreateHRModal({
   );
 }
 
+// ─── ASSIGNEE DROPDOWN (Change 5, 8) ─────────────────────────────────────────
+// Change 8: Single engineer selection; Change 5: "All" org filter for engineers
+function AssigneeDropdown({
+  value,
+  onChange,
+  label = "Assign Engineer",
+  error,
+  dept = "IT",
+}) {
+  const [open, setOpen] = useState(false);
+  const [orgFilter, setOrgFilter] = useState("All"); // Change 5: default All
+  const ref = useRef(null);
+  const allEngineers = dept === "HR" ? HR_ENGINEERS : IT_ENGINEERS;
+
+  // Change 5: Filter engineers by org
+  const engineers =
+    orgFilter === "All"
+      ? allEngineers
+      : allEngineers.filter((e) => e.org === orgFilter);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  // Change 8: single selection - value is string (name) not array
+  const selected = allEngineers.find((e) => e.name === value);
+
+  return (
+    <Field label={label} error={error}>
+      <div ref={ref} className="relative">
+        <button
+          type="button"
+          onClick={() => setOpen((p) => !p)}
+          className="w-full h-10 flex items-center justify-between rounded-xl border border-slate-300 bg-white px-3 text-sm focus:outline-none hover:border-slate-400 transition-colors"
+        >
+          {selected ? (
+            <span className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black bg-blue-500 text-white flex-none">
+                {selected.avatar}
+              </div>
+              <span className="font-semibold text-slate-800">
+                {selected.name}
+              </span>
+              <span className="mono text-[10px] text-slate-400">
+                #{selected.empId}
+              </span>
+            </span>
+          ) : (
+            <span className="text-slate-400">Select engineer…</span>
+          )}
+          <ChevronDown
+            className={`w-4 h-4 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        </button>
+        {open && (
+          <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+            {/* Change 5: Org filter inside dropdown */}
+            <div className="flex gap-1 p-2 border-b border-slate-100 bg-slate-50 flex-wrap">
+              {["All", ...ORGS].map((org) => (
+                <button
+                  key={org}
+                  type="button"
+                  onClick={() => setOrgFilter(org)}
+                  className={`text-[10px] font-bold px-2 py-1 rounded-lg transition-all ${orgFilter === org ? "bg-slate-800 text-white" : "text-slate-500 hover:bg-slate-100"}`}
+                >
+                  {org}
+                </button>
+              ))}
+            </div>
+            <div className="max-h-52 overflow-y-auto thin-scroll">
+              {engineers.length === 0 ? (
+                <div className="px-3 py-4 text-xs text-slate-400 text-center">
+                  No engineers in {orgFilter}
+                </div>
+              ) : (
+                engineers.map((eng) => {
+                  const isSelected = value === eng.name;
+                  return (
+                    <button
+                      key={eng.id}
+                      type="button"
+                      onClick={() => {
+                        onChange(isSelected ? "" : eng.name);
+                        setOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-slate-50 ${isSelected ? "bg-blue-50" : ""}`}
+                    >
+                      <div
+                        className={`w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-black flex-none ${isSelected ? "bg-blue-500 text-white" : "bg-slate-100 text-slate-500"}`}
+                      >
+                        {eng.avatar}
+                      </div>
+                      <span className="flex-1 min-w-0">
+                        <span
+                          className={`font-semibold ${isSelected ? "text-blue-700" : "text-slate-700"}`}
+                        >
+                          {eng.name}
+                        </span>
+                        <span className="ml-1 text-[10px] font-bold mono text-slate-400">
+                          #{eng.empId}
+                        </span>
+                        <span
+                          className={`ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${ORG_PILL[eng.org]}`}
+                        >
+                          {eng.org}
+                        </span>
+                      </span>
+                      {isSelected && (
+                        <CheckCircle2 className="w-4 h-4 text-blue-500 flex-none" />
+                      )}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </Field>
+  );
+}
+
+function OnBehalfOfDropdown({ value, onChange, currentUserId }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const options = USERS.filter((u) => u.id !== currentUserId);
+  useEffect(() => {
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+  const selected = options.find((u) => u.name === value);
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((p) => !p)}
+        className="w-full h-10 flex items-center justify-between rounded-xl border border-blue-200 bg-blue-50 px-3 text-sm focus:outline-none hover:border-blue-300 transition-colors"
+      >
+        {selected ? (
+          <span className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black bg-blue-500 text-white">
+              {selected.avatar}
+            </div>
+            <span className="font-semibold text-blue-700">{selected.name}</span>
+            <span className="mono text-[10px] text-blue-400">
+              #{selected.empId}
+            </span>
+          </span>
+        ) : (
+          <span className="text-slate-400 text-sm">
+            None — raising for myself
+          </span>
+        )}
+        <ChevronDown
+          className={`w-4 h-4 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden max-h-56 overflow-y-auto">
+          <button
+            type="button"
+            onClick={() => {
+              onChange("");
+              setOpen(false);
+            }}
+            className="w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm hover:bg-slate-50 border-b border-slate-100"
+          >
+            <div className="w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black bg-slate-200 text-slate-500">
+              <User className="w-3 h-3" />
+            </div>
+            <span className="text-slate-500 italic">
+              None — raising for myself
+            </span>
+          </button>
+          {options.map((u) => (
+            <button
+              key={u.id}
+              type="button"
+              onClick={() => {
+                onChange(u.name);
+                setOpen(false);
+              }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-slate-50 ${value === u.name ? "bg-blue-50" : ""}`}
+            >
+              <div
+                className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black flex-none ${value === u.name ? "bg-blue-500 text-white" : "bg-slate-100 text-slate-500"}`}
+              >
+                {u.avatar}
+              </div>
+              <span className="flex-1 min-w-0">
+                <span
+                  className={`font-semibold text-sm ${value === u.name ? "text-blue-700" : "text-slate-700"}`}
+                >
+                  {u.name}
+                </span>
+                <span className="ml-1 text-[10px] mono text-slate-400">
+                  #{u.empId}
+                </span>
+              </span>
+              {value === u.name && (
+                <CheckCircle2 className="w-4 h-4 text-blue-500 flex-none" />
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [currentUserId, setCU] = useState(null);
@@ -3384,13 +3693,12 @@ export default function App() {
   const [selectedId, setSelectedId] = useState(null);
   const [createITOpen, setCreateITOpen] = useState(false);
   const [createHROpen, setCreateHROpen] = useState(false);
-  const [orgFilter, setOrgFilter] = useState("IML");
+  const [orgFilter, setOrgFilter] = useState("All"); // Change 5: default All
   const [excelModalOpen, setExcelModalOpen] = useState(false);
 
   const [catalogRaw, setCatalogRaw] = useState([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogError, setCatalogError] = useState(null);
-
   const catalogTree = useMemo(() => parseCatalog(catalogRaw), [catalogRaw]);
 
   useEffect(() => {
@@ -3435,7 +3743,7 @@ export default function App() {
   }, []);
 
   const [enrollForm, setEnrollForm] = useState({
-    itAssignees: [],
+    itAssignee: "",
     itStartDate: todayISO(),
     etaDate: "",
     etaHours: "",
@@ -3461,10 +3769,14 @@ export default function App() {
     remarks: "",
   });
   const [reassignModal, setReassignModal] = useState(false);
-  const [reassignees, setReassignees] = useState([]);
+  const [reassignee, setReassignee] = useState(""); // Change 8: single
   const [editTypeModal, setEditTypeModal] = useState(false);
   const [editPriorityModal, setEditPriorityModal] = useState(false);
   const [holdModalType, setHoldModalType] = useState("hold");
+  // Change 9: Resolve modal
+  const [resolveModal, setResolveModal] = useState(false);
+  const [resolveNote, setResolveNote] = useState("");
+  const [resolveError, setResolveError] = useState("");
 
   const currentUser = getUser(currentUserId);
   const isIT = currentUser?.role === "IT";
@@ -3480,7 +3792,7 @@ export default function App() {
 
   useEffect(() => {
     setEnrollForm({
-      itAssignees: [],
+      itAssignee: "",
       itStartDate: todayISO(),
       etaDate: "",
       etaHours: "",
@@ -3501,9 +3813,12 @@ export default function App() {
     setResponseForm({});
     setStageRemarksModal({ open: false, targetStatus: "", remarks: "" });
     setReassignModal(false);
-    setReassignees([]);
+    setReassignee("");
     setEditTypeModal(false);
     setEditPriorityModal(false);
+    setResolveModal(false);
+    setResolveNote("");
+    setResolveError("");
   }, [selectedId]);
 
   const patch = useCallback(
@@ -3514,23 +3829,22 @@ export default function App() {
     [],
   );
 
+  // Change 5: Filter by org (All = show all)
   const visibleTickets = useMemo(() => {
+    const orgMatch = (t) => orgFilter === "All" || t.org === orgFilter;
     if (isIT)
-      return tickets.filter(
-        (t) => t.ticketDept === "IT" && t.org === orgFilter,
-      );
+      return tickets.filter((t) => t.ticketDept === "IT" && orgMatch(t));
     if (isHR)
-      return tickets.filter(
-        (t) => t.ticketDept === "HR" && t.org === orgFilter,
-      );
+      return tickets.filter((t) => t.ticketDept === "HR" && orgMatch(t));
     return tickets;
   }, [tickets, isIT, isHR, orgFilter]);
 
   const stats = useMemo(() => {
+    const orgMatch = (t) => orgFilter === "All" || t.org === orgFilter;
     const base =
       isIT || isHR
         ? tickets.filter(
-            (t) => t.ticketDept === (isIT ? "IT" : "HR") && t.org === orgFilter,
+            (t) => t.ticketDept === (isIT ? "IT" : "HR") && orgMatch(t),
           )
         : tickets;
     const mineBase =
@@ -3550,15 +3864,16 @@ export default function App() {
       onHold: mineBase.filter((t) => t.status === "On Hold").length,
       waiting: mineBase.filter((t) => t.status === "Waiting for User Input")
         .length,
+      resolved: base.filter((t) => t.status === "Resolved").length,
       closed: base.filter((t) => t.status === "Closed").length,
       overdue,
     };
   }, [tickets, isIT, isHR, orgFilter, currentUser]);
 
+  // Change 8: single assignee in enrollForm
   const enrollTicket = () => {
     const errs = {};
-    if (!enrollForm.itAssignees.length)
-      errs.itAssignees = "At least one assignee required.";
+    if (!enrollForm.itAssignee) errs.itAssignee = "Assignee required.";
     if (!enrollForm.itStartDate) errs.itStartDate = "Start date required.";
     if (!enrollForm.priority) errs.priority = "Priority required.";
     if (!enrollForm.ticketType) errs.ticketType = "Ticket type required.";
@@ -3578,7 +3893,7 @@ export default function App() {
     const ns = "Assigned";
     patch(sel.id, {
       enrolledByIT: true,
-      itAssignees: enrollForm.itAssignees,
+      itAssignees: [enrollForm.itAssignee],
       itStartDate: enrollForm.itStartDate,
       etaDate: enrollForm.etaDate || null,
       etaHours: enrollForm.etaHours || null,
@@ -3591,7 +3906,7 @@ export default function App() {
         {
           status: ns,
           date: enrollForm.itStartDate,
-          note: `Enrolled. Assigned to ${enrollForm.itAssignees.join(", ")}.`,
+          note: `Enrolled. Assigned to ${enrollForm.itAssignee}.`,
           remarks: enrollForm.itRemarks.trim(),
         },
       ],
@@ -3680,6 +3995,77 @@ export default function App() {
     });
     setCloseModal(false);
     setCloseNote("");
+    setSelectedId(null);
+  };
+
+  // Change 9: Submit resolve
+  const submitResolve = () => {
+    if (!resolveNote.trim()) {
+      setResolveError("Resolve note is required.");
+      return;
+    }
+    setResolveError("");
+    patch(sel.id, {
+      status: "Resolved",
+      resolvedDate: todayISO(),
+      resolvedNote: resolveNote.trim(),
+      userConfirmedResolved: false,
+      statusHistory: [
+        ...sel.statusHistory,
+        {
+          status: "Resolved",
+          date: todayISO(),
+          note: `Marked as resolved — ${resolveNote.trim()}`,
+          remarks: resolveNote.trim(),
+        },
+      ],
+    });
+    setResolveModal(false);
+    setResolveNote("");
+    setSelectedId(null);
+  };
+
+  // Change 9: User confirms resolved → move to Closed
+  const confirmResolved = (ticketId) => {
+    const t = tickets.find((x) => x.id === ticketId);
+    if (!t) return;
+    patch(ticketId, {
+      status: "Closed",
+      closingDate: todayISO(),
+      userConfirmedResolved: true,
+      closingNote: "Closed after user confirmed resolution.",
+      statusHistory: [
+        ...t.statusHistory,
+        {
+          status: "Closed",
+          date: todayISO(),
+          note: "User confirmed resolution. Ticket closed.",
+          remarks: "",
+        },
+      ],
+    });
+    setSelectedId(null);
+  };
+
+  // Change 9: User rejects resolved → reopen to In Progress
+  const rejectResolved = (ticketId) => {
+    const t = tickets.find((x) => x.id === ticketId);
+    if (!t) return;
+    patch(ticketId, {
+      status: "In Progress",
+      resolvedDate: null,
+      resolvedNote: "",
+      userConfirmedResolved: false,
+      statusHistory: [
+        ...t.statusHistory,
+        {
+          status: "In Progress",
+          date: todayISO(),
+          note: "User rejected resolution. Reopened to In Progress.",
+          remarks: "",
+        },
+      ],
+    });
     setSelectedId(null);
   };
 
@@ -3795,15 +4181,15 @@ export default function App() {
   };
 
   const submitReassign = () => {
-    if (!reassignees.length) return;
+    if (!reassignee) return;
     patch(sel.id, {
-      itAssignees: reassignees,
+      itAssignees: [reassignee],
       statusHistory: [
         ...sel.statusHistory,
         {
           status: sel.status,
           date: todayISO(),
-          note: `Reassigned to ${reassignees.join(", ")}.`,
+          note: `Reassigned to ${reassignee}.`,
           remarks: "",
         },
       ],
@@ -3826,7 +4212,6 @@ export default function App() {
     });
     setEditTypeModal(false);
   };
-
   const submitEditPriority = (np) => {
     patch(sel.id, {
       priority: np,
@@ -3889,6 +4274,9 @@ export default function App() {
       messages: [],
       strikes: [],
       autoClosedAfterStrikes: false,
+      resolvedDate: null,
+      resolvedNote: "",
+      userConfirmedResolved: false,
     };
     setTickets((prev) => {
       let next = [t, ...prev];
@@ -3921,7 +4309,7 @@ export default function App() {
   if (isDeptUser) {
     return (
       <>
-        <style>{`@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');*,*::before,*::after{box-sizing:border-box;}body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;margin:0;}.mono{font-family:'JetBrains Mono',monospace;}.thin-scroll::-webkit-scrollbar{width:4px;}.thin-scroll::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:99px;}.modal-overlay{position:fixed;inset:0;z-index:50;background:rgba(15,23,42,0.65);display:flex;align-items:center;justify-content:center;padding:1rem;}.modal-box{background:#fff;border-radius:1.25rem;border:1px solid #e2e8f0;box-shadow:0 25px 60px rgba(0,0,0,0.2);width:100%;max-width:940px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;}.mini-modal{background:#fff;border-radius:1rem;border:1px solid #e2e8f0;box-shadow:0 20px 50px rgba(0,0,0,0.25);width:100%;max-width:440px;}.cb-it{background:#1e293b;color:#f8fafc;border-radius:1rem 1rem 0.25rem 1rem;padding:.5rem .875rem;max-width:78%;font-size:.8125rem;line-height:1.5;}.cb-hr{background:#4338ca;color:#fff;border-radius:1rem 1rem 0.25rem 1rem;padding:.5rem .875rem;max-width:78%;font-size:.8125rem;line-height:1.5;}.cb-user{background:#f1f5f9;color:#1e293b;border-radius:1rem 1rem 1rem 0.25rem;padding:.5rem .875rem;max-width:78%;font-size:.8125rem;line-height:1.5;}.cb-self{background:#3b82f6;color:#fff;border-radius:1rem 1rem 0.25rem 1rem;padding:.5rem .875rem;max-width:78%;font-size:.8125rem;line-height:1.5;}`}</style>
+        <style>{`@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');*,*::before,*::after{box-sizing:border-box;}body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;margin:0;}.mono{font-family:'JetBrains Mono',monospace;}.thin-scroll::-webkit-scrollbar{width:4px;}.thin-scroll::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:99px;}.modal-overlay{position:fixed;inset:0;z-index:50;background:rgba(15,23,42,0.65);display:flex;align-items:center;justify-content:center;padding:1rem;}.modal-box{background:#fff;border-radius:1.25rem;border:1px solid #e2e8f0;box-shadow:0 25px 60px rgba(0,0,0,0.2);width:100%;max-width:940px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;}.mini-modal{background:#fff;border-radius:1rem;border:1px solid #e2e8f0;box-shadow:0 20px 50px rgba(0,0,0,0.25);width:100%;max-width:440px;}.cb-it{background:#1e293b;color:#f8fafc;border-radius:1rem 1rem 0.25rem 1rem;padding:.5rem .875rem;max-width:78%;font-size:.8125rem;line-height:1.5;}.cb-hr{background:#4338ca;color:#fff;border-radius:1rem 1rem 0.25rem 1rem;padding:.5rem .875rem;max-width:78%;font-size:.8125rem;line-height:1.5;}.cb-user{background:#f1f5f9;color:#1e293b;border-radius:1rem 1rem 1rem 0.25rem;padding:.5rem .875rem;max-width:78%;font-size:.8125rem;line-height:1.5;}.cb-self{background:#3b82f6;color:#fff;border-radius:1rem 1rem 0.25rem 1rem;padding:.5rem .875rem;max-width:78%;font-size:.8125rem;line-height:1.5;}@media(max-width:640px){.modal-box{max-height:100vh;border-radius:0.75rem;}}`}</style>
         <UserDashboard
           currentUser={currentUser}
           tickets={tickets}
@@ -3974,6 +4362,13 @@ export default function App() {
               setCloseError("");
               setCloseModal(true);
             }}
+            onResolveTicket={() => {
+              setResolveNote("");
+              setResolveError("");
+              setResolveModal(true);
+            }}
+            onConfirmResolved={confirmResolved}
+            onRejectResolved={rejectResolved}
             strikeForm={strikeForm}
             setStrikeForm={setStrikeForm}
             strikeErrors={strikeErrors}
@@ -3987,7 +4382,7 @@ export default function App() {
             onSendMsg={sendMessage}
             allTickets={tickets}
             onReassign={() => {
-              setReassignees(sel.itAssignees || []);
+              setReassignee(sel.itAssignees?.[0] || "");
               setReassignModal(true);
             }}
             onEditType={() => setEditTypeModal(true)}
@@ -4017,12 +4412,12 @@ export default function App() {
     );
   }
 
-  // ── IT Kanban columns ──
+  // ── Kanban columns ──
   const buildITColumns = () => {
     const openUnassigned = visibleTickets.filter(
       (t) => !t.enrolledByIT && t.status === "Open",
     );
-    const queueAll = visibleTickets.filter(
+    const combinedQueue = visibleTickets.filter(
       (t) =>
         t.enrolledByIT &&
         t.status !== "Closed" &&
@@ -4031,6 +4426,7 @@ export default function App() {
         t.status !== "Waiting for User Input" &&
         t.status !== "In Progress" &&
         t.status !== "Assigned" &&
+        t.status !== "Resolved" &&
         !t.itAssignees?.includes(currentUser.name),
     );
     const queueOthers = visibleTickets.filter(
@@ -4041,7 +4437,6 @@ export default function App() {
         t.status !== "Closed" &&
         !TESTING_STATUSES.includes(t.status),
     );
-    const combinedQueue = [...queueAll, ...queueOthers];
     const assignedToMe = visibleTickets.filter(
       (t) =>
         t.enrolledByIT &&
@@ -4072,6 +4467,11 @@ export default function App() {
         FULL_FLOW_CATEGORIES.includes(t.category) &&
         t.itAssignees?.includes(currentUser.name),
     );
+    // Change 9: Resolved column
+    const resolvedCol = visibleTickets.filter(
+      (t) =>
+        t.status === "Resolved" && t.itAssignees?.includes(currentUser.name),
+    );
     const closedCol = visibleTickets.filter((t) => t.status === "Closed");
     return [
       {
@@ -4091,7 +4491,7 @@ export default function App() {
           chip: "bg-slate-100 text-slate-600",
           Icon: List,
         },
-        items: combinedQueue,
+        items: [...combinedQueue, ...queueOthers],
         subtitle: "All assigned tickets",
         accent: "slate",
       },
@@ -4148,6 +4548,15 @@ export default function App() {
             },
           ]
         : []),
+      // Change 9: Resolved column
+      {
+        key: "resolved",
+        label: "Resolved",
+        meta: STATUS_META["Resolved"],
+        items: resolvedCol,
+        subtitle: "Awaiting user confirmation",
+        accent: "emerald",
+      },
       {
         key: "closed",
         label: "Closed",
@@ -4177,6 +4586,11 @@ export default function App() {
         t.enrolledByIT &&
         t.status === "In Progress" &&
         t.itAssignees?.includes(currentUser.name),
+    );
+    // Change 9: HR Resolved
+    const hrResolvedCol = visibleTickets.filter(
+      (t) =>
+        t.status === "Resolved" && t.itAssignees?.includes(currentUser.name),
     );
     const hrClosed = visibleTickets.filter((t) => t.status === "Closed");
     return [
@@ -4211,6 +4625,14 @@ export default function App() {
         items: hrInProgressMine,
         subtitle: "My active work",
         accent: "indigo",
+      },
+      {
+        key: "hr_resolved",
+        label: "Resolved",
+        meta: STATUS_META["Resolved"],
+        items: hrResolvedCol,
+        subtitle: "Awaiting user confirmation",
+        accent: "emerald",
       },
       {
         key: "hr_closed",
@@ -4279,12 +4701,12 @@ export default function App() {
 
   return (
     <>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');*,*::before,*::after{box-sizing:border-box;}body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;margin:0;}.mono{font-family:'JetBrains Mono',monospace;}.thin-scroll::-webkit-scrollbar{width:4px;}.thin-scroll::-webkit-scrollbar-track{background:transparent;}.thin-scroll::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:99px;}.modal-overlay{position:fixed;inset:0;z-index:50;background:rgba(15,23,42,0.65);display:flex;align-items:center;justify-content:center;padding:1rem;}.modal-box{background:#fff;border-radius:1.25rem;border:1px solid #e2e8f0;box-shadow:0 25px 60px rgba(0,0,0,0.2);width:100%;max-width:940px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;}.mini-modal{background:#fff;border-radius:1rem;border:1px solid #e2e8f0;box-shadow:0 20px 50px rgba(0,0,0,0.25);width:100%;max-width:440px;}.cb-it{background:#1e293b;color:#f8fafc;border-radius:1rem 1rem 0.25rem 1rem;padding:.5rem .875rem;max-width:78%;font-size:.8125rem;line-height:1.5;}.cb-hr{background:#4338ca;color:#fff;border-radius:1rem 1rem 0.25rem 1rem;padding:.5rem .875rem;max-width:78%;font-size:.8125rem;line-height:1.5;}.cb-user{background:#f1f5f9;color:#1e293b;border-radius:1rem 1rem 1rem 0.25rem;padding:.5rem .875rem;max-width:78%;font-size:.8125rem;line-height:1.5;}.cb-self{background:#3b82f6;color:#fff;border-radius:1rem 1rem 0.25rem 1rem;padding:.5rem .875rem;max-width:78%;font-size:.8125rem;line-height:1.5;}`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');*,*::before,*::after{box-sizing:border-box;}body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;margin:0;}.mono{font-family:'JetBrains Mono',monospace;}.thin-scroll::-webkit-scrollbar{width:4px;}.thin-scroll::-webkit-scrollbar-track{background:transparent;}.thin-scroll::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:99px;}.modal-overlay{position:fixed;inset:0;z-index:50;background:rgba(15,23,42,0.65);display:flex;align-items:center;justify-content:center;padding:0.5rem;}.modal-box{background:#fff;border-radius:1.25rem;border:1px solid #e2e8f0;box-shadow:0 25px 60px rgba(0,0,0,0.2);width:100%;max-width:940px;max-height:96vh;display:flex;flex-direction:column;overflow:hidden;}.mini-modal{background:#fff;border-radius:1rem;border:1px solid #e2e8f0;box-shadow:0 20px 50px rgba(0,0,0,0.25);width:100%;max-width:440px;}.cb-it{background:#1e293b;color:#f8fafc;border-radius:1rem 1rem 0.25rem 1rem;padding:.5rem .875rem;max-width:78%;font-size:.8125rem;line-height:1.5;}.cb-hr{background:#4338ca;color:#fff;border-radius:1rem 1rem 0.25rem 1rem;padding:.5rem .875rem;max-width:78%;font-size:.8125rem;line-height:1.5;}.cb-user{background:#f1f5f9;color:#1e293b;border-radius:1rem 1rem 1rem 0.25rem;padding:.5rem .875rem;max-width:78%;font-size:.8125rem;line-height:1.5;}.cb-self{background:#3b82f6;color:#fff;border-radius:1rem 1rem 0.25rem 1rem;padding:.5rem .875rem;max-width:78%;font-size:.8125rem;line-height:1.5;}@media(max-width:640px){.modal-box{max-height:100vh;border-radius:0.5rem;}}`}</style>
 
       <div className="h-screen overflow-hidden bg-slate-100 text-slate-900 flex flex-col">
         <header className="flex-none border-b border-slate-200 bg-white shadow-sm">
-          <div className="mx-auto max-w-[1900px] px-5 py-3">
-            <div className="flex items-center justify-between gap-4">
+          <div className="mx-auto max-w-[1900px] px-3 sm:px-5 py-3">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center flex-none">
                   {isHR ? (
@@ -4294,24 +4716,26 @@ export default function App() {
                   )}
                 </div>
                 <div>
-                  <h1 className="text-lg font-extrabold tracking-tight text-slate-900 leading-tight">
-                    {isHR ? "HR" : "IT"} Helpdesk · Enlife System
+                  <h1 className="text-base sm:text-lg font-extrabold tracking-tight text-slate-900 leading-tight">
+                    {isHR ? "HR" : "IT"} Helpdesk
                   </h1>
-                  <p className="text-[11px] text-slate-500 font-medium">
+                  <p className="text-[11px] text-slate-500 font-medium hidden sm:block">
                     Category-driven ticket management
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Change 3: IT user avatar box has a distinct teal color */}
                 <div
-                  className={`flex items-center gap-2 rounded-xl px-3 py-2 border ${isHR ? "border-indigo-200 bg-indigo-50" : "border-blue-200 bg-blue-50"}`}
+                  className={`flex items-center gap-2 rounded-xl px-3 py-2 border ${isHR ? "border-indigo-200 bg-indigo-50" : "border-teal-200 bg-teal-50"}`}
                 >
+                  {/* Change 3: Name shortener box has different color from IT button */}
                   <div
-                    className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black ${isHR ? "bg-indigo-500" : "bg-blue-500"} text-white`}
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black ${isHR ? "bg-indigo-500" : "bg-teal-600"} text-white`}
                   >
                     {currentUser.avatar}
                   </div>
-                  <div>
+                  <div className="hidden sm:block">
                     <p className="text-xs font-bold text-slate-800 leading-none">
                       {currentUser.name}
                     </p>
@@ -4319,19 +4743,20 @@ export default function App() {
                 </div>
                 {isIT && (
                   <>
+                    {/* Change 3: IT ticket button color = slate-700 (different from teal avatar) */}
                     <button
                       onClick={() => setCreateITOpen(true)}
-                      className="inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 transition-colors"
+                      className="inline-flex h-9 items-center gap-2 rounded-xl px-3 sm:px-4 text-sm font-bold text-white bg-slate-700 hover:bg-slate-900 transition-colors"
                     >
                       <Plus className="h-4 w-4" />
-                      IT Ticket
+                      <span className="hidden sm:inline">IT Ticket</span>
                     </button>
                     <button
                       onClick={() => setCreateHROpen(true)}
-                      className="inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
+                      className="inline-flex h-9 items-center gap-2 rounded-xl px-3 sm:px-4 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
                     >
                       <Briefcase className="h-4 w-4" />
-                      HR Ticket
+                      <span className="hidden sm:inline">HR Ticket</span>
                     </button>
                   </>
                 )}
@@ -4339,27 +4764,26 @@ export default function App() {
                   <>
                     <button
                       onClick={() => setCreateITOpen(true)}
-                      className="inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 transition-colors"
+                      className="inline-flex h-9 items-center gap-2 rounded-xl px-3 sm:px-4 text-sm font-bold text-white bg-slate-700 hover:bg-slate-900 transition-colors"
                     >
                       <Wrench className="h-4 w-4" />
-                      IT Ticket
+                      <span className="hidden sm:inline">IT Ticket</span>
                     </button>
                     <button
                       onClick={() => setCreateHROpen(true)}
-                      className="inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
+                      className="inline-flex h-9 items-center gap-2 rounded-xl px-3 sm:px-4 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
                     >
                       <Plus className="h-4 w-4" />
-                      HR Ticket
+                      <span className="hidden sm:inline">HR Ticket</span>
                     </button>
                   </>
                 )}
-                {/* ── EXCEL EXPORT BUTTON ── */}
                 <button
                   onClick={() => setExcelModalOpen(true)}
-                  className={`inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-bold border transition-colors ${isHR ? "border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100" : "border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100"}`}
+                  className={`inline-flex h-9 items-center gap-2 rounded-xl px-3 sm:px-4 text-sm font-bold border transition-colors ${isHR ? "border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100" : "border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100"}`}
                 >
                   <Download className="h-3.5 w-3.5" />
-                  Export
+                  <span className="hidden sm:inline">Export</span>
                 </button>
                 <button
                   onClick={() => setCU(null)}
@@ -4370,11 +4794,9 @@ export default function App() {
               </div>
             </div>
             <div className="mt-3 flex items-center justify-between flex-wrap gap-3">
+              {/* Change 5: OrgFilterBar with All default */}
               <OrgFilterBar value={orgFilter} onChange={setOrgFilter} />
               <div className="flex flex-wrap gap-2 items-center">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mr-1">
-                  {orgFilter} ·
-                </span>
                 {[
                   { l: "Total", v: stats.total, t: "slate" },
                   { l: "Open", v: stats.open, t: "slate" },
@@ -4382,24 +4804,21 @@ export default function App() {
                   ...(isIT
                     ? [
                         { l: "On Hold", v: stats.onHold, t: "amber" },
-                        {
-                          l: "Waiting for User Input",
-                          v: stats.waiting,
-                          t: "orange",
-                        },
+                        { l: "Waiting", v: stats.waiting, t: "orange" },
                       ]
                     : []),
+                  { l: "Resolved", v: stats.resolved, t: "emerald" },
                   { l: "Closed", v: stats.closed, t: "slate" },
                   { l: "Overdue", v: stats.overdue, t: "red" },
                 ].map((s) => (
                   <div
                     key={s.l}
-                    className={`rounded-xl border px-3 py-2 ${s.t === "red" ? "bg-red-50 border-red-200 text-red-700" : s.t === "blue" ? "bg-blue-50 border-blue-200 text-blue-700" : s.t === "amber" ? "bg-amber-50 border-amber-200 text-amber-700" : s.t === "orange" ? "bg-orange-50 border-orange-200 text-orange-700" : "bg-slate-50 border-slate-200 text-slate-700"}`}
+                    className={`rounded-xl border px-2 sm:px-3 py-2 ${s.t === "red" ? "bg-red-50 border-red-200 text-red-700" : s.t === "blue" ? "bg-blue-50 border-blue-200 text-blue-700" : s.t === "amber" ? "bg-amber-50 border-amber-200 text-amber-700" : s.t === "orange" ? "bg-orange-50 border-orange-200 text-orange-700" : s.t === "emerald" ? "bg-emerald-50 border-emerald-200 text-emerald-700" : "bg-slate-50 border-slate-200 text-slate-700"}`}
                   >
                     <p className="text-[10px] font-bold uppercase tracking-widest opacity-60">
                       {s.l}
                     </p>
-                    <p className="text-xl font-extrabold leading-none mt-0.5">
+                    <p className="text-lg sm:text-xl font-extrabold leading-none mt-0.5">
                       {s.v}
                     </p>
                   </div>
@@ -4416,10 +4835,11 @@ export default function App() {
           </div>
         )}
 
-        <main className="flex-1 overflow-x-auto overflow-y-hidden p-4 min-h-0">
+        {/* Change 4: Mobile-responsive kanban — horizontal scroll on mobile */}
+        <main className="flex-1 overflow-x-auto overflow-y-hidden p-2 sm:p-4 min-h-0">
           <div
-            className="flex gap-3 h-full"
-            style={{ minWidth: `${allKanbanCols.length * 215}px` }}
+            className="flex gap-2 sm:gap-3 h-full"
+            style={{ minWidth: `${allKanbanCols.length * 190}px` }}
           >
             {allKanbanCols.map((col) => {
               const Icon = col.meta.Icon;
@@ -4428,37 +4848,39 @@ export default function App() {
                 <div
                   key={col.key}
                   className={`flex flex-col rounded-2xl border shadow-sm min-h-0 ${ac.border} ${ac.bg}`}
-                  style={{ minWidth: "200px", flex: "1" }}
+                  style={{ minWidth: "180px", flex: "1" }}
                 >
                   <div
-                    className={`flex flex-col border-b px-3 py-2.5 flex-none ${ac.hdr}`}
+                    className={`flex flex-col border-b px-2 sm:px-3 py-2.5 flex-none ${ac.hdr}`}
                   >
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
                         <span
                           className={`w-2 h-2 rounded-full ${col.meta.dot}`}
                         />
                         <Icon className={`w-3.5 h-3.5 ${col.meta.txt}`} />
-                        <span className={`text-xs font-bold ${col.meta.txt}`}>
+                        <span
+                          className={`text-xs font-bold ${col.meta.txt} truncate`}
+                        >
                           {col.label}
                         </span>
                       </div>
                       <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${col.meta.chip}`}
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${col.meta.chip} flex-none`}
                       >
                         {col.items.length}
                       </span>
                     </div>
                     {col.subtitle && (
                       <p
-                        className={`text-[10px] mt-0.5 ml-[18px] ${ac.sub} font-medium`}
+                        className={`text-[10px] mt-0.5 ml-[18px] ${ac.sub} font-medium hidden sm:block`}
                       >
                         {col.subtitle}
                       </p>
                     )}
                   </div>
                   <div
-                    className={`flex-1 overflow-y-auto thin-scroll p-2 space-y-2 min-h-0 ${ac.inner}`}
+                    className={`flex-1 overflow-y-auto thin-scroll p-1.5 sm:p-2 space-y-2 min-h-0 ${ac.inner}`}
                   >
                     {col.items.length === 0 ? (
                       <div className="flex items-center justify-center h-14 rounded-xl border border-dashed border-slate-200 bg-white text-[11px] text-slate-400">
@@ -4522,6 +4944,13 @@ export default function App() {
             setCloseError("");
             setCloseModal(true);
           }}
+          onResolveTicket={() => {
+            setResolveNote("");
+            setResolveError("");
+            setResolveModal(true);
+          }}
+          onConfirmResolved={confirmResolved}
+          onRejectResolved={rejectResolved}
           strikeForm={strikeForm}
           setStrikeForm={setStrikeForm}
           strikeErrors={strikeErrors}
@@ -4535,7 +4964,7 @@ export default function App() {
           onSendMsg={sendMessage}
           allTickets={tickets}
           onReassign={() => {
-            setReassignees(sel.itAssignees || []);
+            setReassignee(sel.itAssignees?.[0] || "");
             setReassignModal(true);
           }}
           onEditType={() => setEditTypeModal(true)}
@@ -4755,6 +5184,60 @@ export default function App() {
         </div>
       )}
 
+      {/* Change 9: Resolve Modal */}
+      {resolveModal && (
+        <div
+          className="modal-overlay"
+          onClick={(e) =>
+            e.target === e.currentTarget && setResolveModal(false)
+          }
+        >
+          <div className="mini-modal p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                  <ThumbsUp className="w-4 h-4 text-emerald-600" />
+                  Mark as Resolved
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  User will be asked to confirm resolution.
+                </p>
+              </div>
+              <button
+                onClick={() => setResolveModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <Field label="Resolution Note" error={resolveError}>
+              <textarea
+                rows={4}
+                value={resolveNote}
+                onChange={(e) => setResolveNote(e.target.value)}
+                placeholder="Describe what was done to resolve this ticket..."
+                className="w-full rounded-xl border border-emerald-300 bg-white px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500 resize-none"
+              />
+            </Field>
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={() => setResolveModal(false)}
+                className="flex-1 h-10 rounded-xl border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitResolve}
+                className="flex-1 h-10 rounded-xl bg-emerald-600 text-sm font-bold text-white hover:bg-emerald-700 flex items-center justify-center gap-2"
+              >
+                <ThumbsUp className="w-4 h-4" />
+                Mark Resolved
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {reassignModal && (
         <div
           className="modal-overlay"
@@ -4769,7 +5252,7 @@ export default function App() {
                   Reassign
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Select engineers.
+                  Select an engineer.
                 </p>
               </div>
               <button
@@ -4779,9 +5262,10 @@ export default function App() {
                 <X className="w-4 h-4" />
               </button>
             </div>
+            {/* Change 8: single engineer */}
             <AssigneeDropdown
-              value={reassignees}
-              onChange={setReassignees}
+              value={reassignee}
+              onChange={setReassignee}
               dept={sel?.ticketDept || "IT"}
             />
             <div className="flex gap-2 mt-4">
@@ -4793,7 +5277,7 @@ export default function App() {
               </button>
               <button
                 onClick={submitReassign}
-                disabled={!reassignees.length}
+                disabled={!reassignee}
                 className="flex-1 h-10 rounded-xl bg-blue-600 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 <UserCheck className="w-4 h-4" />
@@ -4857,17 +5341,10 @@ export default function App() {
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="space-y-2">
-              {PRIORITIES.map((p) => (
-                <button
-                  key={p}
-                  onClick={() => submitEditPriority(p)}
-                  className={`w-full h-10 rounded-xl border text-sm font-bold transition-all ${sel.priority === p ? PRIORITY_PILL[p] + " shadow-sm" : PRIORITY_PILL[p] + " opacity-60 hover:opacity-100"}`}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
+            <PrioritySelector
+              value={sel.priority}
+              onChange={submitEditPriority}
+            />
           </div>
         </div>
       )}
@@ -4891,8 +5368,6 @@ export default function App() {
           onSubmit={createTicket}
         />
       )}
-
-      {/* ── EXCEL DOWNLOAD MODAL ── */}
       {excelModalOpen && (
         <ExcelDownloadModal
           onClose={() => setExcelModalOpen(false)}
@@ -4901,197 +5376,6 @@ export default function App() {
         />
       )}
     </>
-  );
-}
-
-// ─── ASSIGNEE DROPDOWN ────────────────────────────────────────────────────────
-function AssigneeDropdown({
-  value,
-  onChange,
-  label = "Assign Engineers",
-  error,
-  dept = "IT",
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-  const engineers = dept === "HR" ? HR_ENGINEERS : IT_ENGINEERS;
-  useEffect(() => {
-    const handler = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-  const toggle = (name) =>
-    onChange(
-      value.includes(name) ? value.filter((n) => n !== name) : [...value, name],
-    );
-  return (
-    <Field label={label} error={error}>
-      <div ref={ref} className="relative">
-        <button
-          type="button"
-          onClick={() => setOpen((p) => !p)}
-          className="w-full h-10 flex items-center justify-between rounded-xl border border-slate-300 bg-white px-3 text-sm focus:outline-none hover:border-slate-400 transition-colors"
-        >
-          <span
-            className={
-              value.length === 0
-                ? "text-slate-400"
-                : "text-slate-800 font-semibold"
-            }
-          >
-            {value.length === 0 ? "Select engineers..." : value.join(", ")}
-          </span>
-          <ChevronDown
-            className={`w-4 h-4 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
-          />
-        </button>
-        {open && (
-          <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden max-h-64 overflow-y-auto">
-            {engineers.map((eng) => {
-              const selected = value.includes(eng.name);
-              return (
-                <button
-                  key={eng.id}
-                  type="button"
-                  onClick={() => toggle(eng.name)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-slate-50 ${selected ? "bg-blue-50" : ""}`}
-                >
-                  <div
-                    className={`w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-black flex-none ${selected ? "bg-blue-500 text-white" : "bg-slate-100 text-slate-500"}`}
-                  >
-                    {eng.avatar}
-                  </div>
-                  <span className="flex-1 min-w-0">
-                    <span
-                      className={`font-semibold ${selected ? "text-blue-700" : "text-slate-700"}`}
-                    >
-                      {eng.name}
-                    </span>
-                    <span className="ml-1 text-[10px] font-bold mono text-slate-400">
-                      #{eng.empId}
-                    </span>
-                    <span
-                      className={`ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${ORG_PILL[eng.org]}`}
-                    >
-                      {eng.org}
-                    </span>
-                  </span>
-                  {selected && (
-                    <CheckCircle2 className="w-4 h-4 text-blue-500 flex-none" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </Field>
-  );
-}
-
-function OnBehalfOfDropdown({ value, onChange, currentUserId }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-  const options = USERS.filter((u) => u.id !== currentUserId);
-  useEffect(() => {
-    const handler = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-  const selected = options.find((u) => u.name === value);
-  return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((p) => !p)}
-        className="w-full h-10 flex items-center justify-between rounded-xl border border-blue-200 bg-blue-50 px-3 text-sm focus:outline-none hover:border-blue-300 transition-colors"
-      >
-        {selected ? (
-          <span className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black bg-blue-500 text-white">
-              {selected.avatar}
-            </div>
-            <span className="font-semibold text-blue-700">{selected.name}</span>
-            <span className="mono text-[10px] text-blue-400">
-              #{selected.empId}
-            </span>
-            <span
-              className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${ORG_PILL[selected.org]}`}
-            >
-              {selected.org}
-            </span>
-          </span>
-        ) : (
-          <span className="text-slate-400 text-sm">
-            None — raising for myself
-          </span>
-        )}
-        <ChevronDown
-          className={`w-4 h-4 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
-        />
-      </button>
-      {open && (
-        <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden max-h-56 overflow-y-auto">
-          <button
-            type="button"
-            onClick={() => {
-              onChange("");
-              setOpen(false);
-            }}
-            className="w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm hover:bg-slate-50 border-b border-slate-100"
-          >
-            <div className="w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black bg-slate-200 text-slate-500">
-              <User className="w-3 h-3" />
-            </div>
-            <span className="text-slate-500 italic">
-              None — raising for myself
-            </span>
-          </button>
-          {options.map((u) => (
-            <button
-              key={u.id}
-              type="button"
-              onClick={() => {
-                onChange(u.name);
-                setOpen(false);
-              }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-slate-50 ${value === u.name ? "bg-blue-50" : ""}`}
-            >
-              <div
-                className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black flex-none ${value === u.name ? "bg-blue-500 text-white" : "bg-slate-100 text-slate-500"}`}
-              >
-                {u.avatar}
-              </div>
-              <span className="flex-1 min-w-0">
-                <span
-                  className={`font-semibold text-sm ${value === u.name ? "text-blue-700" : "text-slate-700"}`}
-                >
-                  {u.name}
-                </span>
-                <span className="ml-1 text-[10px] mono text-slate-400">
-                  #{u.empId}
-                </span>
-                <span
-                  className={`ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${ORG_PILL[u.org]}`}
-                >
-                  {u.org}
-                </span>
-                <span className="ml-1 text-[10px] text-slate-400">
-                  · {u.dept}
-                </span>
-              </span>
-              {value === u.name && (
-                <CheckCircle2 className="w-4 h-4 text-blue-500 flex-none" />
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -5114,6 +5398,9 @@ function TicketModal({
   onPutOnHold,
   onWaitingForUserInput,
   onCloseTicket,
+  onResolveTicket,
+  onConfirmResolved,
+  onRejectResolved,
   strikeForm,
   setStrikeForm,
   strikeErrors,
@@ -5140,6 +5427,8 @@ function TicketModal({
   const isOnHold = ticket.status === "On Hold";
   const isWaiting = ticket.status === "Waiting for User Input";
   const isAssigned = ticket.status === "Assigned";
+  // Change 9
+  const isResolved = ticket.status === "Resolved";
   const catFlow = isHRTicket ? HR_STATUSES : cat ? cat.statuses : [];
   const curIdx = catFlow.indexOf(ticket.status);
   const endRef = useRef(null);
@@ -5148,6 +5437,7 @@ function TicketModal({
     ticket.ticketType === "Incident" || ticket.requestType === "Incident";
   const isFullFlowIT =
     !isHRTicket && FULL_FLOW_CATEGORIES.includes(ticket.category);
+  const isUserView = !isIT && !isHR;
 
   useEffect(() => {
     setTab("details");
@@ -5160,13 +5450,14 @@ function TicketModal({
   const getById = (id) => allTickets.find((t) => t.id === id);
 
   const nextStatuses =
-    canAct && !isClosed && !isOnHold && !isWaiting
+    canAct && !isClosed && !isOnHold && !isWaiting && !isResolved
       ? catFlow.filter(
           (s, i) =>
             i > curIdx &&
             s !== "Closed" &&
             s !== "Waiting for User Input" &&
-            s !== "On Hold",
+            s !== "On Hold" &&
+            s !== "Resolved",
         )
       : [];
 
@@ -5191,7 +5482,7 @@ function TicketModal({
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div className="modal-box">
-        <div className="flex-none border-b border-slate-100 px-6 py-4">
+        <div className="flex-none border-b border-slate-100 px-4 sm:px-6 py-4">
           <div className="flex items-start gap-4">
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap gap-1.5 mb-2">
@@ -5348,7 +5639,7 @@ function TicketModal({
           </div>
 
           <div className="grid grid-cols-4 gap-2 mt-3">
-            <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-2">
+            <div className="rounded-xl bg-slate-50 border border-slate-100 px-2 sm:px-3 py-2">
               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
                 Active
               </p>
@@ -5356,13 +5647,13 @@ function TicketModal({
                 {daysBetween(ticket.submittedDate, todayISO())}d
               </p>
             </div>
-            <div className={`rounded-xl border px-3 py-2 ${badge.cls}`}>
+            <div className={`rounded-xl border px-2 sm:px-3 py-2 ${badge.cls}`}>
               <p className="text-[10px] font-bold uppercase tracking-widest opacity-60">
                 ETA
               </p>
               <p className="text-sm font-bold mt-0.5">{badge.label}</p>
             </div>
-            <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-2">
+            <div className="rounded-xl bg-slate-50 border border-slate-100 px-2 sm:px-3 py-2">
               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
                 Msgs
               </p>
@@ -5370,7 +5661,7 @@ function TicketModal({
                 {ticket.messages?.length || 0}
               </p>
             </div>
-            <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-2">
+            <div className="rounded-xl bg-slate-50 border border-slate-100 px-2 sm:px-3 py-2">
               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
                 Strikes
               </p>
@@ -5421,7 +5712,7 @@ function TicketModal({
 
         <div className="flex-1 overflow-y-auto thin-scroll min-h-0">
           {tab === "details" && (
-            <div className="p-6 space-y-4">
+            <div className="p-4 sm:p-6 space-y-4">
               {isReadOnly && (
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 flex items-start gap-3">
                   <EyeOff className="w-5 h-5 text-slate-400 flex-none mt-0.5" />
@@ -5552,6 +5843,7 @@ function TicketModal({
                 </Section>
               )}
 
+              {/* Change 6: Enroll section shows current catalog data and allows changing request type (IT only) */}
               {(isIT || isHR) &&
                 canAct &&
                 !ticket.enrolledByIT &&
@@ -5559,12 +5851,47 @@ function TicketModal({
                   <Section
                     title="Enroll Ticket"
                     accent="amber"
-                    subtitle={`Assign ${isHRTicket ? "HR" : "IT"} engineers, set priority and ETA.`}
+                    subtitle={`Assign ${isHRTicket ? "HR" : "IT"} engineer, set priority and ETA.`}
                   >
                     <div className="mt-4 space-y-3">
+                      {/* Change 6: Show category/catalog data from ticket */}
+                      {(ticket.catalogParent ||
+                        ticket.catalogCategory ||
+                        ticket.catalogSubCategory) && (
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">
+                            Submitted Category
+                          </p>
+                          <div className="flex items-center gap-1 flex-wrap">
+                            {ticket.catalogParent && (
+                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">
+                                {ticket.catalogParent}
+                              </span>
+                            )}
+                            {ticket.catalogCategory &&
+                              ticket.catalogCategory !==
+                                ticket.catalogParent && (
+                                <>
+                                  <ChevronRight className="w-2.5 h-2.5 text-slate-300" />
+                                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">
+                                    {ticket.catalogCategory}
+                                  </span>
+                                </>
+                              )}
+                            {ticket.catalogSubCategory && (
+                              <>
+                                <ChevronRight className="w-2.5 h-2.5 text-slate-300" />
+                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">
+                                  {ticket.catalogSubCategory}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      )}
                       <div className="grid grid-cols-2 gap-3">
                         <Field label="Priority" error={enrollErrors.priority}>
-                          <div className="flex flex-wrap gap-2">
+                          <div className="flex flex-wrap gap-1.5">
                             {PRIORITIES.map((p) => (
                               <button
                                 key={p}
@@ -5578,34 +5905,38 @@ function TicketModal({
                             ))}
                           </div>
                         </Field>
-                        <Field
-                          label="Request Type"
-                          error={enrollErrors.ticketType}
-                        >
-                          <div className="flex gap-2">
-                            {TICKET_TYPES.map((tt) => (
-                              <button
-                                key={tt}
-                                onClick={() =>
-                                  setEnrollForm((f) => ({
-                                    ...f,
-                                    ticketType: tt,
-                                  }))
-                                }
-                                className={`flex-1 h-8 rounded-lg border text-xs font-bold transition-all ${enrollForm.ticketType === tt ? "bg-slate-900 text-white border-slate-900" : "border-slate-300 text-slate-600 hover:bg-slate-50"}`}
-                              >
-                                {tt}
-                              </button>
-                            ))}
-                          </div>
-                        </Field>
+                        {/* Change 7: Only show Request Type for IT tickets, not HR */}
+                        {!isHRTicket && (
+                          <Field
+                            label="Request Type"
+                            error={enrollErrors.ticketType}
+                          >
+                            <div className="flex gap-2">
+                              {TICKET_TYPES.map((tt) => (
+                                <button
+                                  key={tt}
+                                  onClick={() =>
+                                    setEnrollForm((f) => ({
+                                      ...f,
+                                      ticketType: tt,
+                                    }))
+                                  }
+                                  className={`flex-1 h-8 rounded-lg border text-xs font-bold transition-all ${enrollForm.ticketType === tt ? "bg-slate-900 text-white border-slate-900" : "border-slate-300 text-slate-600 hover:bg-slate-50"}`}
+                                >
+                                  {tt}
+                                </button>
+                              ))}
+                            </div>
+                          </Field>
+                        )}
                       </div>
+                      {/* Change 8: single engineer */}
                       <AssigneeDropdown
-                        value={enrollForm.itAssignees}
+                        value={enrollForm.itAssignee}
                         onChange={(v) =>
-                          setEnrollForm((f) => ({ ...f, itAssignees: v }))
+                          setEnrollForm((f) => ({ ...f, itAssignee: v }))
                         }
-                        error={enrollErrors.itAssignees}
+                        error={enrollErrors.itAssignee}
                         dept={isHRTicket ? "HR" : "IT"}
                       />
                       <div className="grid grid-cols-2 gap-3">
@@ -5625,7 +5956,7 @@ function TicketModal({
                             className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm focus:outline-none focus:border-slate-400"
                           />
                         </Field>
-                        {enrollForm.ticketType === "Incident" ? (
+                        {!isHRTicket && enrollForm.ticketType === "Incident" ? (
                           <Field
                             label="Expected Hours"
                             error={enrollErrors.etaHours}
@@ -5719,7 +6050,7 @@ function TicketModal({
                   </div>
                   <div className="mt-2 rounded-xl border border-slate-100 bg-white px-3 py-2.5">
                     <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                      Assignees
+                      Assignee
                     </p>
                     <p className="text-xs font-bold text-slate-700 mt-0.5">
                       {ticket.itAssignees?.join(", ") || "—"}
@@ -5915,14 +6246,6 @@ function TicketModal({
                                 </button>
                               </div>
                             )}
-                          {strike &&
-                            !strike.responseReceived &&
-                            !isLastSentStrike && (
-                              <div className="mt-2 rounded-lg bg-slate-50 border border-slate-100 px-3 py-2 text-xs text-slate-400 italic">
-                                Response window closed — Strike {num + 1} was
-                                sent without receiving a reply.
-                              </div>
-                            )}
                           {isNext && canSendNext && (
                             <div className="space-y-2">
                               <Field
@@ -6012,6 +6335,7 @@ function TicketModal({
                 !isOnHold &&
                 !isWaiting &&
                 !isAssigned &&
+                !isResolved &&
                 nextStatuses.length > 0 && (
                   <Section title="Advance Stage" subtitle="Move forward.">
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -6033,60 +6357,79 @@ function TicketModal({
                   </Section>
                 )}
 
-              {canAct && ticket.enrolledByIT && !isClosed && !isAssigned && (
-                <Section
-                  title={isOnHold || isWaiting ? "Actions" : "Quick Actions"}
-                >
-                  <div className="mt-3 flex gap-2 flex-wrap">
-                    {!isOnHold && !isWaiting && isFullFlowIT && (
-                      <>
+              {canAct &&
+                ticket.enrolledByIT &&
+                !isClosed &&
+                !isAssigned &&
+                !isResolved && (
+                  <Section
+                    title={isOnHold || isWaiting ? "Actions" : "Quick Actions"}
+                  >
+                    <div className="mt-3 flex gap-2 flex-wrap">
+                      {!isOnHold && !isWaiting && isFullFlowIT && (
+                        <>
+                          <button
+                            onClick={onPutOnHold}
+                            className="flex items-center gap-2 h-9 px-4 rounded-xl bg-amber-100 text-amber-800 border border-amber-200 text-sm font-semibold hover:bg-amber-200"
+                          >
+                            <AlertCircle className="w-4 h-4" />
+                            Put On Hold
+                          </button>
+                          <button
+                            onClick={onWaitingForUserInput}
+                            className="flex items-center gap-2 h-9 px-4 rounded-xl bg-orange-100 text-orange-800 border border-orange-200 text-sm font-semibold hover:bg-orange-200"
+                          >
+                            <Timer className="w-4 h-4" />
+                            Waiting for User Input
+                          </button>
+                        </>
+                      )}
+                      {(isOnHold || isWaiting) && (
                         <button
-                          onClick={onPutOnHold}
-                          className="flex items-center gap-2 h-9 px-4 rounded-xl bg-amber-100 text-amber-800 border border-amber-200 text-sm font-semibold hover:bg-amber-200"
+                          onClick={() => onMoveStatus("In Progress")}
+                          className="flex items-center gap-2 h-9 px-4 rounded-xl bg-blue-100 text-blue-800 border border-blue-200 text-sm font-semibold hover:bg-blue-200"
                         >
-                          <AlertCircle className="w-4 h-4" />
-                          Put On Hold
+                          <Clock3 className="w-4 h-4" />
+                          Resume to In Progress
                         </button>
+                      )}
+                      {/* Change 9: Resolve button */}
+                      <button
+                        onClick={onResolveTicket}
+                        className="flex items-center gap-2 h-9 px-4 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700"
+                      >
+                        <ThumbsUp className="w-4 h-4" />
+                        Mark as Resolved
+                      </button>
+                      <button
+                        onClick={onCloseTicket}
+                        className="flex items-center gap-2 h-9 px-4 rounded-xl bg-slate-800 text-white text-sm font-semibold hover:bg-slate-900"
+                      >
+                        <XCircle className="w-4 h-4" />
+                        Close Ticket
+                      </button>
+                      {ticket.itAssignees?.length > 0 && !isClosed && (
                         <button
-                          onClick={onWaitingForUserInput}
-                          className="flex items-center gap-2 h-9 px-4 rounded-xl bg-orange-100 text-orange-800 border border-orange-200 text-sm font-semibold hover:bg-orange-200"
+                          onClick={onReassign}
+                          className="flex items-center gap-2 h-9 px-4 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 text-sm font-semibold hover:bg-blue-100"
                         >
-                          <Timer className="w-4 h-4" />
-                          Waiting for User Input
+                          <RefreshCw className="w-4 h-4" />
+                          Reassign
                         </button>
-                      </>
-                    )}
-                    {(isOnHold || isWaiting) && (
-                      <button
-                        onClick={() => onMoveStatus("In Progress")}
-                        className="flex items-center gap-2 h-9 px-4 rounded-xl bg-blue-100 text-blue-800 border border-blue-200 text-sm font-semibold hover:bg-blue-200"
-                      >
-                        <Clock3 className="w-4 h-4" />
-                        Resume to In Progress
-                      </button>
-                    )}
-                    <button
-                      onClick={onCloseTicket}
-                      className="flex items-center gap-2 h-9 px-4 rounded-xl bg-slate-800 text-white text-sm font-semibold hover:bg-slate-900"
-                    >
-                      <XCircle className="w-4 h-4" />
-                      Close Ticket
-                    </button>
-                    {ticket.itAssignees?.length > 0 && !isClosed && (
-                      <button
-                        onClick={onReassign}
-                        className="flex items-center gap-2 h-9 px-4 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 text-sm font-semibold hover:bg-blue-100"
-                      >
-                        <RefreshCw className="w-4 h-4" />
-                        Reassign
-                      </button>
-                    )}
-                  </div>
-                </Section>
-              )}
+                      )}
+                    </div>
+                  </Section>
+                )}
 
               {canAct && ticket.enrolledByIT && !isClosed && isAssigned && (
                 <div className="flex gap-2 mt-1">
+                  <button
+                    onClick={onResolveTicket}
+                    className="flex items-center gap-2 h-9 px-4 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700"
+                  >
+                    <ThumbsUp className="w-4 h-4" />
+                    Mark as Resolved
+                  </button>
                   <button
                     onClick={onCloseTicket}
                     className="flex items-center gap-2 h-9 px-4 rounded-xl bg-slate-800 text-white text-sm font-semibold hover:bg-slate-900"
@@ -6106,6 +6449,86 @@ function TicketModal({
                 </div>
               )}
 
+              {/* Change 9: Resolved state - IT/HR view */}
+              {isResolved && canAct && (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                  <div className="flex items-start gap-3 mb-3">
+                    <ThumbsUp className="w-5 h-5 text-emerald-600 flex-none mt-0.5" />
+                    <div>
+                      <p className="text-sm font-bold text-emerald-800">
+                        Marked as Resolved
+                      </p>
+                      <p className="text-xs text-emerald-600 mt-0.5">
+                        Resolved on {fmt(ticket.resolvedDate)} · Awaiting user
+                        confirmation
+                      </p>
+                      {ticket.resolvedNote && (
+                        <p className="text-xs text-emerald-700 mt-1 italic">
+                          "{ticket.resolvedNote}"
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => onMoveStatus("In Progress")}
+                      className="flex-1 h-9 rounded-xl bg-white border border-emerald-200 text-emerald-700 text-xs font-bold hover:bg-emerald-100 flex items-center justify-center gap-2"
+                    >
+                      <ThumbsDown className="w-3.5 h-3.5" />
+                      Reopen
+                    </button>
+                    <button
+                      onClick={onCloseTicket}
+                      className="flex-1 h-9 rounded-xl bg-emerald-700 text-white text-xs font-bold hover:bg-emerald-800 flex items-center justify-center gap-2"
+                    >
+                      <XCircle className="w-3.5 h-3.5" />
+                      Force Close
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Change 9: Resolved state - User view */}
+              {isResolved && isUserView && (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                  <div className="flex items-start gap-3 mb-3">
+                    <ThumbsUp className="w-5 h-5 text-emerald-600 flex-none mt-0.5" />
+                    <div>
+                      <p className="text-sm font-bold text-emerald-800">
+                        IT marked this ticket as Resolved
+                      </p>
+                      <p className="text-xs text-emerald-600 mt-0.5">
+                        Resolved on {fmt(ticket.resolvedDate)}
+                      </p>
+                      {ticket.resolvedNote && (
+                        <p className="text-xs text-emerald-700 mt-1 italic">
+                          "{ticket.resolvedNote}"
+                        </p>
+                      )}
+                      <p className="text-xs text-slate-600 mt-2 font-semibold">
+                        Is your issue fixed?
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => onRejectResolved(ticket.id)}
+                      className="flex-1 h-10 rounded-xl bg-white border border-red-200 text-red-700 text-sm font-bold hover:bg-red-50 flex items-center justify-center gap-2"
+                    >
+                      <ThumbsDown className="w-4 h-4" />
+                      Not Fixed
+                    </button>
+                    <button
+                      onClick={() => onConfirmResolved(ticket.id)}
+                      className="flex-1 h-10 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 flex items-center justify-center gap-2"
+                    >
+                      <ThumbsUp className="w-4 h-4" />
+                      Yes, Fixed!
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {isClosed && (
                 <div
                   className={`rounded-2xl border p-4 ${ticket.autoClosedAfterStrikes ? "border-red-200 bg-red-50" : "border-emerald-200 bg-emerald-50"}`}
@@ -6122,7 +6545,9 @@ function TicketModal({
                       >
                         {ticket.autoClosedAfterStrikes
                           ? "Auto-Closed — 3 unanswered follow-ups"
-                          : "Ticket Closed"}
+                          : ticket.userConfirmedResolved
+                            ? "Closed — User Confirmed Resolution"
+                            : "Ticket Closed"}
                       </p>
                       <p
                         className={`text-xs mt-0.5 ${ticket.autoClosedAfterStrikes ? "text-red-600" : "text-emerald-600"}`}
@@ -6146,7 +6571,7 @@ function TicketModal({
           {tab === "discussion" && (
             <div className="flex flex-col" style={{ minHeight: "400px" }}>
               <div
-                className="flex-1 overflow-y-auto thin-scroll p-5 space-y-3"
+                className="flex-1 overflow-y-auto thin-scroll p-4 sm:p-5 space-y-3"
                 style={{ minHeight: "300px" }}
               >
                 {(!ticket.messages || ticket.messages.length === 0) && (
@@ -6238,7 +6663,7 @@ function TicketModal({
           )}
 
           {tab === "history" && (
-            <div className="p-5 space-y-2">
+            <div className="p-4 sm:p-5 space-y-2">
               {[...ticket.statusHistory].reverse().map((e, i) => {
                 const m = STATUS_META[e.status] || STATUS_META["Open"];
                 const SI = m.Icon;
@@ -6316,6 +6741,7 @@ function InfoBox({ label, value }) {
     </div>
   );
 }
+
 function Field({ label, error, children }) {
   return (
     <div>

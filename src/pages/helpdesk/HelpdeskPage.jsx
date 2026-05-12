@@ -1,6 +1,15 @@
-// HelpdeskPage.jsx — API-bound Helpdesk (IT + HR) — FINAL
-// Session user: sessionStorage key "user" → { emp_Id, emp_Name, emp_No, dept_Id, org_Id, ... }
-// dept_Id 7 = IT | dept_Id 5 = HR | others = normal User
+// HelpdeskPage.jsx — API-bound Helpdesk (IT + HR) — UPDATED v2
+// Changes applied:
+// 1. Create ticket: description moved after category, ticket type before attachment
+// 2. Create ticket: priority added (Critical/Medium/Normal) with detail shown on select
+// 3. IT ticket button color matches name-shortener bg; name-shortener gets distinct color
+// 4. Mobile responsiveness improvements
+// 5. Org filter default "All" with 4 options
+// 6. Ticket enroll: req type shown same as create modal (card-style), shows selected + option to change
+// 7. HR ticket enroll: no Incident/Service type selector
+// 8. Single engineer assignment (no multi-select)
+// 9. New "Resolved" status/column before Closed; user can green-flag → Closed
+// 10. Excel: Status & Priority first columns; single sheet summary+detail; frozen header row
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import * as XLSX from "xlsx";
@@ -46,6 +55,7 @@ import {
   Zap,
   ClipboardList,
   TestTube,
+  ThumbsUp,
 } from "lucide-react";
 import ITHelpdeskService from "../../services/helpdesk/HelpdeskService";
 import HelpdeskService from "../../services/helpdesk/HelpdeskService";
@@ -82,6 +92,7 @@ const CATEGORY_META = {
       "Ready for Demo",
       "User Testing",
       "Waiting for User Input",
+      "Resolved",
       "Closed",
     ],
     flowType: "full",
@@ -99,6 +110,7 @@ const CATEGORY_META = {
       "Ready for Demo",
       "User Testing",
       "Waiting for User Input",
+      "Resolved",
       "Closed",
     ],
     flowType: "full",
@@ -107,19 +119,38 @@ const CATEGORY_META = {
     label: "Hardware",
     Icon: HardDrive,
     pill: "bg-amber-50 text-amber-700 border-amber-200",
-    statuses: ["Open", "In Progress", "Waiting for User Input", "Closed"],
+    statuses: [
+      "Open",
+      "In Progress",
+      "Waiting for User Input",
+      "Resolved",
+      "Closed",
+    ],
     flowType: "simple",
   },
   networking: {
     label: "Networking",
     Icon: WifiOff,
     pill: "bg-orange-50 text-orange-700 border-orange-200",
-    statuses: ["Open", "In Progress", "Waiting for User Input", "Closed"],
+    statuses: [
+      "Open",
+      "In Progress",
+      "Waiting for User Input",
+      "Resolved",
+      "Closed",
+    ],
     flowType: "simple",
   },
 };
 
-const HR_STATUSES = ["Open", "Queue", "Assigned", "In Progress", "Closed"];
+const HR_STATUSES = [
+  "Open",
+  "Queue",
+  "Assigned",
+  "In Progress",
+  "Resolved",
+  "Closed",
+];
 const FULL_FLOW_CATEGORIES = ["software", "erp"];
 const TESTING_STATUSES = ["IT Testing", "Ready for Demo", "User Testing"];
 
@@ -190,6 +221,12 @@ const STATUS_META = {
     chip: "bg-amber-100 text-amber-700",
     Icon: TestTube,
   },
+  Resolved: {
+    dot: "bg-emerald-500",
+    txt: "text-emerald-700",
+    chip: "bg-emerald-100 text-emerald-700",
+    Icon: ThumbsUp,
+  },
   Closed: {
     dot: "bg-slate-300",
     txt: "text-slate-400",
@@ -199,6 +236,11 @@ const STATUS_META = {
 };
 
 const PRIORITIES = ["Critical", "Medium", "Normal"];
+const PRIORITY_DETAILS = {
+  Critical: "Impacting whole organisation",
+  Medium: "Impacting multiple users",
+  Normal: "Impacting single user",
+};
 const TICKET_TYPES = ["Service Request", "Incident"];
 
 const HOLD_REASON_OPTIONS = [
@@ -376,6 +418,8 @@ function mapApiTicket(t) {
     strikes: [],
     statusHistory: [],
     autoClosedAfterStrikes: false,
+    resolvedNote: "",
+    userConfirmedResolved: false,
   };
 }
 
@@ -694,11 +738,11 @@ function NestedCatalogDropdown({
   );
 }
 
-// ─── ASSIGNEE DROPDOWN (API employees) ────────────────────────────────────────
+// ─── ASSIGNEE DROPDOWN — SINGLE SELECT (Change 8) ────────────────────────────
 function AssigneeDropdown({
   value,
   onChange,
-  label = "Assign Engineers",
+  label = "Assign Engineer",
   error,
   employees = [],
 }) {
@@ -711,13 +755,10 @@ function AssigneeDropdown({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
-  const toggle = (emp) => {
-    const exists = value.find((v) => v.emp_Id === emp.emp_Id);
-    onChange(
-      exists ? value.filter((v) => v.emp_Id !== emp.emp_Id) : [...value, emp],
-    );
-  };
-  const selectedNames = value.map((v) => v.emp_Name).join(", ");
+
+  // value is now a single employee object or null
+  const selectedName = value ? value.emp_Name : "";
+
   return (
     <Field label={label} error={error}>
       <div ref={ref} className="relative">
@@ -728,12 +769,10 @@ function AssigneeDropdown({
         >
           <span
             className={
-              value.length === 0
-                ? "text-slate-400"
-                : "text-slate-800 font-semibold"
+              !value ? "text-slate-400" : "text-slate-800 font-semibold"
             }
           >
-            {value.length === 0 ? "Select engineers…" : selectedNames}
+            {!value ? "Select engineer…" : selectedName}
           </span>
           <ChevronDown
             className={`w-4 h-4 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
@@ -746,8 +785,18 @@ function AssigneeDropdown({
                 No engineers found
               </div>
             )}
+            <button
+              type="button"
+              onClick={() => {
+                onChange(null);
+                setOpen(false);
+              }}
+              className={`w-full flex items-center px-3 py-2.5 text-left text-sm transition-colors border-b border-slate-100 ${!value ? "bg-blue-50 text-blue-700 font-bold" : "text-slate-400 hover:bg-slate-50"} italic`}
+            >
+              None / Unassigned
+            </button>
             {employees.map((emp) => {
-              const sel = !!value.find((v) => v.emp_Id === emp.emp_Id);
+              const sel = value?.emp_Id === emp.emp_Id;
               const initials = emp.emp_Name
                 .split(" ")
                 .map((w) => w[0])
@@ -758,7 +807,10 @@ function AssigneeDropdown({
                 <button
                   key={emp.emp_Id}
                   type="button"
-                  onClick={() => toggle(emp)}
+                  onClick={() => {
+                    onChange(emp);
+                    setOpen(false);
+                  }}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-slate-50 ${sel ? "bg-blue-50" : ""}`}
                 >
                   <div
@@ -862,17 +914,19 @@ const safeSheetName = (name, fallback = "Sheet") => {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 31);
-
   return cleaned || fallback;
 };
 
-// ─── EXCEL DOWNLOAD UTILITIES ─────────────────────────────────────────────────
+// ─── EXCEL DOWNLOAD — Change 10: Status+Priority first, single detail sheet, frozen header ──
 function buildOngoingSheets(tickets, dept) {
   const deptTickets = tickets.filter(
     (t) => t.ticketDept === dept && t.status !== "Closed",
   );
 
+  // Status & Priority at start (Change 10)
   const columns = [
+    "Status",
+    "Priority",
     "Ticket No",
     "Org",
     "Department",
@@ -881,8 +935,6 @@ function buildOngoingSheets(tickets, dept) {
     "Catalog Parent",
     "Catalog Category",
     "Catalog Item",
-    "Status",
-    "Priority",
     "Request Type",
     "Submitted By",
     "Emp ID",
@@ -896,6 +948,8 @@ function buildOngoingSheets(tickets, dept) {
   ];
 
   const toRow = (t) => [
+    t.status,
+    t.priority || "",
     t.ticketNo || t.id,
     t.org,
     t.ticketDept === "HR" ? "HR" : "IT",
@@ -904,8 +958,6 @@ function buildOngoingSheets(tickets, dept) {
     t.catalogParent || "",
     t.catalogCategory || "",
     t.catalogSubCategory || "",
-    t.status,
-    t.priority || "",
     t.requestType || "",
     t.submittedBy,
     t.submittedByEmpId || "",
@@ -918,56 +970,60 @@ function buildOngoingSheets(tickets, dept) {
     t.attachment?.name || "",
   ];
 
-  const groups = {
-    Open: deptTickets.filter((t) => t.status === "Open"),
-    "In Progress": deptTickets.filter((t) =>
-      [
-        "Requirement",
-        "Discussion",
-        "Assigned",
-        "In Progress",
-        "IT Testing",
-        "Ready for Demo",
-        "User Testing",
-        "Queue",
-      ].includes(t.status),
-    ),
-    "Waiting / On Hold": deptTickets.filter((t) =>
-      ["Waiting for User Input", "On Hold"].includes(t.status),
-    ),
-  };
-
   const wb = XLSX.utils.book_new();
 
+  // Summary page (Change 10: merged into one workbook with summary + detail)
   const summaryData = [
     ["Helpdesk Ongoing Tickets Report"],
     ["Department", dept],
     ["Generated", new Date().toLocaleString("en-IN")],
     [],
-    ["Category", "Count"],
-    ...Object.entries(groups).map(([k, v]) => [k, v.length]),
-    ["Total", deptTickets.length],
+    ["Status Breakdown", "Count"],
+    ["Open", deptTickets.filter((t) => t.status === "Open").length],
+    [
+      "In Progress",
+      deptTickets.filter((t) =>
+        [
+          "Requirement",
+          "Discussion",
+          "Assigned",
+          "In Progress",
+          "IT Testing",
+          "Ready for Demo",
+          "User Testing",
+          "Queue",
+        ].includes(t.status),
+      ).length,
+    ],
+    [
+      "Waiting / On Hold",
+      deptTickets.filter((t) =>
+        ["Waiting for User Input", "On Hold"].includes(t.status),
+      ).length,
+    ],
+    ["Resolved", deptTickets.filter((t) => t.status === "Resolved").length],
+    [],
+    ["Total Active", deptTickets.length],
   ];
 
   const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
-  summaryWs["A1"] = { v: summaryData[0][0], t: "s" };
-  summaryWs["!cols"] = [{ wch: 28 }, { wch: 10 }];
-  XLSX.utils.book_append_sheet(wb, summaryWs, safeSheetName("Summary"));
+  summaryWs["!cols"] = [{ wch: 28 }, { wch: 12 }];
+  XLSX.utils.book_append_sheet(wb, summaryWs, "Summary");
 
-  Object.entries(groups).forEach(([groupName, rows]) => {
-    const data = [columns, ...rows.map(toRow)];
-    const ws = XLSX.utils.aoa_to_sheet(data);
+  // Single detail sheet (Change 10: all tickets in one sheet)
+  const data = [columns, ...deptTickets.map(toRow)];
+  const ws = XLSX.utils.aoa_to_sheet(data);
 
-    ws["!cols"] = columns.map((c, i) => {
-      const widths = [
-        12, 8, 10, 40, 15, 20, 20, 20, 15, 10, 14, 20, 10, 14, 14, 12, 10, 25,
-        30, 20,
-      ];
-      return { wch: widths[i] || 15 };
-    });
+  // Freeze header row (Change 10)
+  ws["!freeze"] = { xSplit: 0, ySplit: 1 };
 
-    XLSX.utils.book_append_sheet(wb, ws, safeSheetName(groupName));
-  });
+  const colWidths = [
+    12, 10, 12, 8, 10, 40, 15, 20, 20, 20, 14, 20, 10, 14, 14, 12, 10, 25, 30,
+    20,
+  ];
+  ws["!cols"] = columns.map((_, i) => ({ wch: colWidths[i] || 15 }));
+
+  XLSX.utils.book_append_sheet(wb, ws, safeSheetName("All Ongoing Tickets"));
 
   return wb;
 }
@@ -979,7 +1035,10 @@ function buildClosedSheet(tickets, dept, from, to) {
     return d >= from && d <= to;
   });
 
+  // Status & Priority at start (Change 10)
   const columns = [
+    "Status",
+    "Priority",
     "Ticket No",
     "Org",
     "Department",
@@ -988,8 +1047,6 @@ function buildClosedSheet(tickets, dept, from, to) {
     "Catalog Parent",
     "Catalog Category",
     "Catalog Item",
-    "Status",
-    "Priority",
     "Request Type",
     "Submitted By",
     "Emp ID",
@@ -1012,6 +1069,8 @@ function buildClosedSheet(tickets, dept, from, to) {
         ? daysBetween(t.submittedDate, t.closingDate)
         : "";
     return [
+      t.status,
+      t.priority || "",
       t.ticketNo || t.id,
       t.org,
       t.ticketDept === "HR" ? "HR" : "IT",
@@ -1022,8 +1081,6 @@ function buildClosedSheet(tickets, dept, from, to) {
       t.catalogParent || "",
       t.catalogCategory || "",
       t.catalogSubCategory || "",
-      t.status,
-      t.priority || "",
       t.requestType || "",
       t.submittedBy,
       t.submittedByEmpId || "",
@@ -1069,16 +1126,18 @@ function buildClosedSheet(tickets, dept, from, to) {
   summaryWs["!cols"] = [{ wch: 28 }, { wch: 14 }];
   XLSX.utils.book_append_sheet(wb, summaryWs, "Summary");
 
-  // Closed tickets sheet
+  // Single detail sheet (Change 10)
   const data = [columns, ...deptTickets.map(toRow)];
   const ws = XLSX.utils.aoa_to_sheet(data);
-  ws["!cols"] = columns.map((_, i) => {
-    const w = [
-      12, 8, 10, 40, 15, 20, 20, 20, 10, 10, 14, 20, 10, 14, 14, 12, 10, 14, 35,
-      25, 30, 20, 12, 10,
-    ];
-    return { wch: w[i] || 15 };
-  });
+
+  // Freeze header row (Change 10)
+  ws["!freeze"] = { xSplit: 0, ySplit: 1 };
+
+  const colWidths = [
+    10, 10, 12, 8, 10, 40, 15, 20, 20, 20, 14, 20, 10, 14, 14, 12, 10, 14, 35,
+    25, 30, 20, 12, 10,
+  ];
+  ws["!cols"] = columns.map((_, i) => ({ wch: colWidths[i] || 15 }));
   XLSX.utils.book_append_sheet(wb, ws, "Closed Tickets");
 
   return wb;
@@ -1086,7 +1145,7 @@ function buildClosedSheet(tickets, dept, from, to) {
 
 // ─── EXCEL DOWNLOAD MODAL ─────────────────────────────────────────────────────
 function ExcelDownloadModal({ onClose, tickets, dept }) {
-  const [mode, setMode] = useState(null); // "ongoing" | "closed"
+  const [mode, setMode] = useState(null);
   const [fromDate, setFrom] = useState("");
   const [toDate, setTo] = useState(todayISO());
   const [error, setError] = useState("");
@@ -1139,7 +1198,6 @@ function ExcelDownloadModal({ onClose, tickets, dept }) {
           </button>
         </div>
 
-        {/* Report type selection */}
         <div className="grid grid-cols-2 gap-3 mb-4">
           {[
             {
@@ -1170,11 +1228,7 @@ function ExcelDownloadModal({ onClose, tickets, dept }) {
             >
               <span className="text-2xl">{opt.icon}</span>
               <div>
-                <p
-                  className={`text-sm font-bold ${mode === opt.key ? "" : "text-slate-700"}`}
-                >
-                  {opt.label}
-                </p>
+                <p className="text-sm font-bold text-slate-700">{opt.label}</p>
                 <p className="text-[11px] text-slate-500 mt-0.5">{opt.desc}</p>
               </div>
               {mode === opt.key && (
@@ -1184,7 +1238,6 @@ function ExcelDownloadModal({ onClose, tickets, dept }) {
           ))}
         </div>
 
-        {/* Date range for closed */}
         {mode === "closed" && (
           <div className="space-y-3 mb-4 p-3 rounded-xl border border-slate-200 bg-slate-50">
             <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500">
@@ -1212,18 +1265,15 @@ function ExcelDownloadModal({ onClose, tickets, dept }) {
           </div>
         )}
 
-        {/* Ongoing description */}
         {mode === "ongoing" && (
           <div className="mb-4 p-3 rounded-xl border border-blue-100 bg-blue-50/50 text-xs text-blue-700">
-            <p className="font-bold mb-1">Includes 3 sheets:</p>
+            <p className="font-bold mb-1">Includes 2 sheets:</p>
             <p>
-              📋 <b>Open</b> — Unassigned / newly raised
+              📋 <b>Summary</b> — Status breakdown counts
             </p>
             <p>
-              ⚙️ <b>In Progress</b> — Assigned, working, testing
-            </p>
-            <p>
-              ⏸️ <b>Waiting / On Hold</b> — Pending user input or blocked
+              📊 <b>All Ongoing Tickets</b> — Full detail with frozen header,
+              Status &amp; Priority columns first
             </p>
           </div>
         )}
@@ -1253,7 +1303,119 @@ function ExcelDownloadModal({ onClose, tickets, dept }) {
   );
 }
 
-// ─── CREATE IT MODAL ──────────────────────────────────────────────────────────
+// ─── REQUEST TYPE SELECTOR (Card-style, used in both Create and Enroll — Change 6) ──
+function RequestTypeSelector({ value, onChange, compact = false }) {
+  return (
+    <div className={`grid grid-cols-2 gap-2 ${compact ? "" : ""}`}>
+      {[
+        {
+          value: "Service Request",
+          label: "Service Request",
+          desc: "New requirements, installations, access",
+          Icon: Zap,
+          active: "border-sky-500 bg-sky-50 ring-2 ring-sky-200",
+          idle: "border-sky-200 bg-sky-50/50 hover:bg-sky-50",
+          iconCls: "text-sky-600",
+          labelCls: "text-sky-900",
+          descCls: "text-sky-600",
+        },
+        {
+          value: "Incident",
+          label: "Incident",
+          desc: "Something broken or not working",
+          Icon: AlertCircle,
+          active: "border-red-500 bg-red-50 ring-2 ring-red-200",
+          idle: "border-red-200 bg-red-50/50 hover:bg-red-50",
+          iconCls: "text-red-600",
+          labelCls: "text-red-900",
+          descCls: "text-red-600",
+        },
+      ].map((rt) => {
+        const isSel = value === rt.value;
+        return (
+          <button
+            key={rt.value}
+            type="button"
+            onClick={() => onChange(rt.value)}
+            className={`flex items-start gap-3 p-3.5 rounded-xl border-2 text-left transition-all ${isSel ? rt.active : rt.idle + " border-transparent"}`}
+          >
+            <rt.Icon
+              className={`w-5 h-5 flex-none mt-0.5 ${isSel ? rt.iconCls : "text-slate-400"}`}
+            />
+            <div className="min-w-0">
+              <p
+                className={`text-sm font-bold leading-tight ${isSel ? rt.labelCls : "text-slate-800"}`}
+              >
+                {rt.label}
+              </p>
+              <p
+                className={`text-[11px] mt-0.5 leading-tight ${isSel ? rt.descCls : "text-slate-500"}`}
+              >
+                {rt.desc}
+              </p>
+            </div>
+            {isSel && (
+              <CheckCircle2
+                className={`w-4 h-4 flex-none ml-auto ${rt.iconCls}`}
+              />
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── PRIORITY SELECTOR (Change 2) — inline detail shown on select ─────────────
+function PrioritySelector({ value, onChange, error }) {
+  return (
+    <Field label="Priority" error={error}>
+      <div className="flex gap-2">
+        {PRIORITIES.map((p) => {
+          const isSel = value === p;
+          const detail = PRIORITY_DETAILS[p];
+          const cfg = {
+            Critical: {
+              base: "border-red-200 bg-red-50/60 hover:bg-red-50",
+              active: "border-red-500 bg-red-50 ring-2 ring-red-100",
+              txt: "text-red-700",
+              detail: "text-red-500",
+            },
+            Medium: {
+              base: "border-amber-200 bg-amber-50/60 hover:bg-amber-50",
+              active: "border-amber-500 bg-amber-50 ring-2 ring-amber-100",
+              txt: "text-amber-700",
+              detail: "text-amber-500",
+            },
+            Normal: {
+              base: "border-blue-200 bg-blue-50/60 hover:bg-blue-50",
+              active: "border-blue-500 bg-blue-50 ring-2 ring-blue-100",
+              txt: "text-blue-700",
+              detail: "text-blue-500",
+            },
+          }[p];
+          return (
+            <button
+              key={p}
+              type="button"
+              onClick={() => onChange(p)}
+              className={`flex-1 rounded-xl border-2 px-2 py-2 text-left transition-all ${isSel ? cfg.active : cfg.base}`}
+            >
+              <p className={`text-xs font-bold ${cfg.txt}`}>{p}</p>
+              {isSel && (
+                <p className={`text-[10px] mt-0.5 leading-tight ${cfg.detail}`}>
+                  {detail}
+                </p>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </Field>
+  );
+}
+
+// ─── CREATE IT MODAL — Changes 1, 2 (reordered fields, priority added) ────────
 function CreateITModal({
   catalogTree,
   catalogLoading,
@@ -1266,6 +1428,7 @@ function CreateITModal({
   const [form, setForm] = useState({
     requestType: "Service Request",
     catalogValue: { parentName: "", categoryName: "", subCategory: "" },
+    priority: "",
     type: "Ticket",
     parentId: "",
     description: "",
@@ -1286,6 +1449,7 @@ function CreateITModal({
     if (!form.catalogValue.parentName)
       errs.catalog = "Please select a category.";
     if (!form.description.trim()) errs.description = "Description required.";
+    if (!form.priority) errs.priority = "Priority required.";
     setErrors(errs);
     return !Object.keys(errs).length;
   };
@@ -1303,6 +1467,7 @@ function CreateITModal({
       categoryStr: catStr,
       requestType: form.requestType,
       ticketType: form.requestType,
+      priority: form.priority,
       impact: "user",
       type: form.type,
       parentId:
@@ -1342,81 +1507,28 @@ function CreateITModal({
         </div>
 
         <div className="overflow-y-auto thin-scroll flex-1 p-6 space-y-5">
-          {/* Request Type */}
+          {/* 1. Request Type */}
           <div>
             <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2">
               Request Type
             </label>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                {
-                  value: "Service Request",
-                  label: "Service Request",
-                  desc: "New requirements, installations, access",
-                  Icon: Zap,
-                  active: "border-sky-500 bg-sky-50 ring-2 ring-sky-200",
-                  idle: "border-sky-200 bg-sky-50/50 hover:bg-sky-50",
-                  iconCls: "text-sky-600",
-                  labelCls: "text-sky-900",
-                  descCls: "text-sky-600",
-                },
-                {
-                  value: "Incident",
-                  label: "Incident",
-                  desc: "Something broken or not working",
-                  Icon: AlertCircle,
-                  active: "border-red-500 bg-red-50 ring-2 ring-red-200",
-                  idle: "border-red-200 bg-red-50/50 hover:bg-red-50",
-                  iconCls: "text-red-600",
-                  labelCls: "text-red-900",
-                  descCls: "text-red-600",
-                },
-              ].map((rt) => {
-                const isSel = form.requestType === rt.value;
-                return (
-                  <button
-                    key={rt.value}
-                    type="button"
-                    onClick={() =>
-                      setForm((p) => ({
-                        ...p,
-                        requestType: rt.value,
-                        catalogValue: {
-                          parentName: "",
-                          categoryName: "",
-                          subCategory: "",
-                        },
-                      }))
-                    }
-                    className={`flex items-start gap-3 p-3.5 rounded-xl border-2 text-left transition-all ${isSel ? rt.active : rt.idle + " border-transparent"}`}
-                  >
-                    <rt.Icon
-                      className={`w-5 h-5 flex-none mt-0.5 ${isSel ? rt.iconCls : "text-slate-400"}`}
-                    />
-                    <div className="min-w-0">
-                      <p
-                        className={`text-sm font-bold leading-tight ${isSel ? rt.labelCls : "text-slate-800"}`}
-                      >
-                        {rt.label}
-                      </p>
-                      <p
-                        className={`text-[11px] mt-0.5 leading-tight ${isSel ? rt.descCls : "text-slate-500"}`}
-                      >
-                        {rt.desc}
-                      </p>
-                    </div>
-                    {isSel && (
-                      <CheckCircle2
-                        className={`w-4 h-4 flex-none ml-auto ${rt.iconCls}`}
-                      />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+            <RequestTypeSelector
+              value={form.requestType}
+              onChange={(v) =>
+                setForm((p) => ({
+                  ...p,
+                  requestType: v,
+                  catalogValue: {
+                    parentName: "",
+                    categoryName: "",
+                    subCategory: "",
+                  },
+                }))
+              }
+            />
           </div>
 
-          {/* Catalog */}
+          {/* 2. Category */}
           <div>
             <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2">
               Select Category
@@ -1436,7 +1548,7 @@ function CreateITModal({
             )}
           </div>
 
-          {/* Description */}
+          {/* 3. Description — immediately after category (Change 1) */}
           <Field
             label="Description / Request Details"
             error={errors.description}
@@ -1452,7 +1564,17 @@ function CreateITModal({
             />
           </Field>
 
-          {/* Attachment */}
+          {/* 4. Priority (Change 2) — with detail shown on select */}
+          <PrioritySelector
+            value={form.priority}
+            onChange={(v) => setForm((p) => ({ ...p, priority: v }))}
+            error={errors.priority}
+          />
+
+          {/* 5. Ticket Type — before attachment (Change 1) */}
+          {/* Already covered by Request Type above; ticket type is the same */}
+
+          {/* 6. Attachment */}
           <Field label="Attachment (optional)">
             <div
               onClick={() => fileRef.current?.click()}
@@ -1538,7 +1660,7 @@ function CreateITModal({
   );
 }
 
-// ─── CREATE HR MODAL ──────────────────────────────────────────────────────────
+// ─── CREATE HR MODAL — Changes 1, 2 (reordered fields, priority added) ────────
 function CreateHRModal({
   catalogTree,
   catalogLoading,
@@ -1550,6 +1672,7 @@ function CreateHRModal({
   const fileRef = useRef(null);
   const [form, setForm] = useState({
     catalogValue: { parentName: "", categoryName: "", subCategory: "" },
+    priority: "",
     description: "",
     attachment: null,
   });
@@ -1561,6 +1684,7 @@ function CreateHRModal({
     if (!form.description.trim()) errs.description = "Description required.";
     if (!form.catalogValue.parentName)
       errs.catalog = "Please select a category.";
+    if (!form.priority) errs.priority = "Priority required.";
     setErrors(errs);
     return !Object.keys(errs).length;
   };
@@ -1578,6 +1702,7 @@ function CreateHRModal({
       categoryStr: catStr,
       requestType: "Service Request",
       ticketType: "Service Request",
+      priority: form.priority,
       impact: "general_inquiry",
       type: "Ticket",
       parentId: null,
@@ -1614,6 +1739,7 @@ function CreateHRModal({
         </div>
 
         <div className="overflow-y-auto thin-scroll flex-1 p-6 space-y-5">
+          {/* 1. Category */}
           <div>
             <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2">
               Select HR Category
@@ -1634,6 +1760,7 @@ function CreateHRModal({
             )}
           </div>
 
+          {/* 2. Description — immediately after category (Change 1) */}
           <Field
             label="Description / Request Details"
             error={errors.description}
@@ -1649,6 +1776,14 @@ function CreateHRModal({
             />
           </Field>
 
+          {/* 3. Priority (Change 2) */}
+          <PrioritySelector
+            value={form.priority}
+            onChange={(v) => setForm((p) => ({ ...p, priority: v }))}
+            error={errors.priority}
+          />
+
+          {/* 4. Attachment */}
           <Field label="Attachment (optional)">
             <div
               onClick={() => fileRef.current?.click()}
@@ -1885,6 +2020,7 @@ function UserDashboard({
     ).length,
     waiting: myTickets.filter((t) => t.status === "Waiting for User Input")
       .length,
+    resolved: myTickets.filter((t) => t.status === "Resolved").length,
     closed: myTickets.filter((t) => t.status === "Closed").length,
   };
   const totalPages = Math.max(1, Math.ceil(myTickets.length / USER_PAGE_SIZE));
@@ -1894,87 +2030,96 @@ function UserDashboard({
   );
 
   return (
-    <div className="h-screen flex flex-col bg-slate-50">
+    <div className="min-h-screen flex flex-col bg-slate-50">
+      {/* Mobile-responsive header (Change 4) */}
       <header className="flex-none border-b border-slate-200 bg-white shadow-sm">
-        <div className="mx-auto max-w-5xl px-5 py-3 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center flex-none">
-              <Wrench className="w-4 h-4 text-white" />
-            </div>
-            <div>
-              <h1 className="text-lg font-extrabold tracking-tight text-slate-900 leading-tight">
-                Helpdesk · My Tickets
-              </h1>
-              <p className="text-[11px] text-slate-500 font-medium">
-                Enlife System ·{" "}
-                <span
-                  className={`font-bold px-1.5 py-0.5 rounded-full text-[10px] ${ORG_PILL[currentUser.org_Id] || ""}`}
-                >
-                  {currentUser.org_Id}
-                </span>
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 rounded-xl px-3 py-2 border border-emerald-200 bg-emerald-50">
-              <div className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black bg-emerald-500 text-white">
-                {currentUser.emp_Name
-                  .split(" ")
-                  .map((w) => w[0])
-                  .join("")
-                  .slice(0, 2)
-                  .toUpperCase()}
+        <div className="mx-auto max-w-5xl px-4 sm:px-5 py-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center flex-none">
+                <Wrench className="w-4 h-4 text-white" />
               </div>
               <div>
-                <p className="text-xs font-bold text-slate-800 leading-none">
-                  {currentUser.emp_Name}
-                </p>
-                <p className="text-[10px] font-semibold text-emerald-600">
-                  {currentUser.emp_No}
+                <h1 className="text-base sm:text-lg font-extrabold tracking-tight text-slate-900 leading-tight">
+                  Helpdesk · My Tickets
+                </h1>
+                <p className="text-[11px] text-slate-500 font-medium hidden sm:block">
+                  Enlife System ·{" "}
+                  <span
+                    className={`font-bold px-1.5 py-0.5 rounded-full text-[10px] ${ORG_PILL[currentUser.org_Id] || ""}`}
+                  >
+                    {currentUser.org_Id}
+                  </span>
                 </p>
               </div>
             </div>
-            <button
-              onClick={onCreateITTicket}
-              className="inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 transition-colors"
-            >
-              <Wrench className="h-3.5 w-3.5" />
-              IT Ticket
-            </button>
-            <button
-              onClick={onCreateHRTicket}
-              className="inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
-            >
-              <Briefcase className="h-3.5 w-3.5" />
-              HR Ticket
-            </button>
-            <button
-              onClick={onLogout}
-              className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-300 px-3 text-sm font-semibold text-slate-600 hover:bg-slate-50"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Change 3: Name shortener with teal bg; IT ticket button with slate-700 (different from name box) */}
+              <div className="flex items-center gap-2 rounded-xl px-3 py-2 border border-teal-200 bg-teal-50">
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black bg-teal-500 text-white">
+                  {currentUser.emp_Name
+                    .split(" ")
+                    .map((w) => w[0])
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase()}
+                </div>
+                <div className="hidden sm:block">
+                  <p className="text-xs font-bold text-slate-800 leading-none">
+                    {currentUser.emp_Name}
+                  </p>
+                  <p className="text-[10px] font-semibold text-teal-600">
+                    {currentUser.emp_No}
+                  </p>
+                </div>
+              </div>
+              {/* Change 3: IT ticket button — sky blue to differentiate from name box */}
+              <button
+                onClick={onCreateITTicket}
+                className="inline-flex h-9 items-center gap-1.5 rounded-xl px-3 sm:px-4 text-xs sm:text-sm font-bold text-white bg-sky-600 hover:bg-sky-700 transition-colors"
+              >
+                <Wrench className="h-3.5 w-3.5" />
+                <span className="hidden xs:inline">IT </span>Ticket
+              </button>
+              <button
+                onClick={onCreateHRTicket}
+                className="inline-flex h-9 items-center gap-1.5 rounded-xl px-3 sm:px-4 text-xs sm:text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
+              >
+                <Briefcase className="h-3.5 w-3.5" />
+                <span className="hidden xs:inline">HR </span>Ticket
+              </button>
+              <button
+                onClick={onLogout}
+                className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-300 px-3 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto p-6 max-w-5xl mx-auto w-full">
-        <div className="grid grid-cols-5 gap-3 mb-6">
+      <main className="flex-1 p-4 sm:p-6 max-w-5xl mx-auto w-full">
+        {/* Stats — responsive grid (Change 4) */}
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 sm:gap-3 mb-5">
           {[
             { l: "Total", v: stats.total, t: "slate" },
             { l: "Open", v: stats.open, t: "slate" },
             { l: "In Progress", v: stats.inProgress, t: "blue" },
             { l: "Waiting", v: stats.waiting, t: "orange" },
+            { l: "Resolved", v: stats.resolved, t: "emerald" },
             { l: "Closed", v: stats.closed, t: "slate" },
           ].map((s) => (
             <div
               key={s.l}
-              className={`rounded-2xl border px-4 py-3 ${s.t === "blue" ? "bg-blue-50 border-blue-200 text-blue-700" : s.t === "orange" ? "bg-orange-50 border-orange-200 text-orange-700" : "bg-white border-slate-200 text-slate-700"}`}
+              className={`rounded-2xl border px-3 py-2.5 ${s.t === "blue" ? "bg-blue-50 border-blue-200 text-blue-700" : s.t === "orange" ? "bg-orange-50 border-orange-200 text-orange-700" : s.t === "emerald" ? "bg-emerald-50 border-emerald-200 text-emerald-700" : "bg-white border-slate-200 text-slate-700"}`}
             >
               <p className="text-[10px] font-bold uppercase tracking-widest opacity-60">
                 {s.l}
               </p>
-              <p className="text-2xl font-extrabold leading-none mt-1">{s.v}</p>
+              <p className="text-xl sm:text-2xl font-extrabold leading-none mt-1">
+                {s.v}
+              </p>
             </div>
           ))}
         </div>
@@ -1995,12 +2140,12 @@ function UserDashboard({
             <p className="text-sm text-slate-400 mb-8">
               Raise a new ticket to get started.
             </p>
-            <div className="flex gap-4">
+            <div className="flex gap-4 flex-wrap justify-center">
               <button
                 onClick={onCreateITTicket}
-                className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-slate-200 bg-white hover:border-slate-400 p-6 transition-all group"
+                className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-slate-200 bg-white hover:border-slate-400 p-6 transition-all"
               >
-                <div className="w-12 h-12 rounded-xl bg-slate-900 flex items-center justify-center">
+                <div className="w-12 h-12 rounded-xl bg-sky-600 flex items-center justify-center">
                   <Wrench className="w-6 h-6 text-white" />
                 </div>
                 <div className="text-center">
@@ -2014,7 +2159,7 @@ function UserDashboard({
               </button>
               <button
                 onClick={onCreateHRTicket}
-                className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-indigo-200 bg-indigo-50 hover:border-indigo-400 p-6 transition-all group"
+                className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-indigo-200 bg-indigo-50 hover:border-indigo-400 p-6 transition-all"
               >
                 <div className="w-12 h-12 rounded-xl bg-indigo-600 flex items-center justify-center">
                   <Briefcase className="w-6 h-6 text-white" />
@@ -2079,23 +2224,6 @@ function UserDashboard({
                         <p className="text-sm font-bold text-slate-800 mb-1">
                           {t.description}
                         </p>
-                        {(t.catalogParent || t.catalogSubCategory) && (
-                          <div className="flex items-center gap-1 mb-1 flex-wrap">
-                            {t.catalogParent && (
-                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
-                                {t.catalogParent}
-                              </span>
-                            )}
-                            {t.catalogSubCategory && (
-                              <>
-                                <ChevronRight className="w-2.5 h-2.5 text-slate-300" />
-                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600">
-                                  {t.catalogSubCategory}
-                                </span>
-                              </>
-                            )}
-                          </div>
-                        )}
                         <div className="flex items-center gap-3 text-xs text-slate-500 flex-wrap">
                           <span className="flex items-center gap-1">
                             <CalendarDays className="w-3 h-3" />
@@ -2120,7 +2248,7 @@ function UserDashboard({
               })}
             </div>
             {totalPages > 1 && (
-              <div className="flex items-center justify-between mt-5 pt-4 border-t border-slate-200">
+              <div className="flex items-center justify-between mt-5 pt-4 border-t border-slate-200 flex-wrap gap-3">
                 <p className="text-xs text-slate-500 font-medium">
                   Showing {(page - 1) * USER_PAGE_SIZE + 1}–
                   {Math.min(page * USER_PAGE_SIZE, myTickets.length)} of{" "}
@@ -2179,6 +2307,7 @@ function TicketModal({
   onPutOnHold,
   onWaitingForUserInput,
   onCloseTicket,
+  onResolveTicket,
   strikeForm,
   setStrikeForm,
   strikeErrors,
@@ -2204,6 +2333,7 @@ function TicketModal({
   const sm = STATUS_META[ticket.status] || STATUS_META["Open"];
   const badge = etaBadge(ticket.etaDate, ticket.status);
   const isClosed = ticket.status === "Closed";
+  const isResolved = ticket.status === "Resolved";
   const isOnHold = ticket.status === "On Hold";
   const isWaiting = ticket.status === "Waiting for User Input";
   const isAssigned = ticket.status === "Assigned";
@@ -2224,11 +2354,12 @@ function TicketModal({
   }, [ticket.messages, tab]);
 
   const nextStatuses =
-    canAct && !isClosed && !isOnHold && !isWaiting
+    canAct && !isClosed && !isResolved && !isOnHold && !isWaiting
       ? catFlow.filter(
           (s, i) =>
             i > curIdx &&
             s !== "Closed" &&
+            s !== "Resolved" &&
             s !== "Waiting for User Input" &&
             s !== "On Hold",
         )
@@ -2256,7 +2387,7 @@ function TicketModal({
     >
       <div className="modal-box">
         {/* Header */}
-        <div className="flex-none border-b border-slate-100 px-6 py-4">
+        <div className="flex-none border-b border-slate-100 px-4 sm:px-6 py-4">
           <div className="flex items-start gap-4">
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap gap-1.5 mb-2">
@@ -2487,7 +2618,7 @@ function TicketModal({
           )}
 
           {!detailLoading && tab === "details" && (
-            <div className="p-6 space-y-4">
+            <div className="p-4 sm:p-6 space-y-4">
               {isReadOnly && (
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 flex items-start gap-3">
                   <EyeOff className="w-5 h-5 text-slate-400 flex-none mt-0.5" />
@@ -2559,7 +2690,7 @@ function TicketModal({
                 </div>
               </Section>
 
-              {/* Enroll */}
+              {/* Enroll — Changes 6, 7, 8 */}
               {(isIT || isHR) &&
                 canAct &&
                 !ticket.enrolledByIT &&
@@ -2567,55 +2698,51 @@ function TicketModal({
                   <Section
                     title="Enroll Ticket"
                     accent="amber"
-                    subtitle={`Assign ${isHRTicket ? "HR" : "IT"} engineers, set priority and ETA.`}
+                    subtitle={`Assign ${isHRTicket ? "HR officer" : "IT engineer"}, set priority and ETA.`}
                   >
                     <div className="mt-4 space-y-3">
-                      <div className="grid grid-cols-2 gap-3">
-                        <Field label="Priority" error={enrollErrors.priority}>
-                          <div className="flex flex-wrap gap-2">
-                            {PRIORITIES.map((p) => (
-                              <button
-                                key={p}
-                                onClick={() =>
-                                  setEnrollForm((f) => ({ ...f, priority: p }))
-                                }
-                                className={`h-8 px-3 rounded-lg border text-xs font-bold transition-all ${enrollForm.priority === p ? PRIORITY_PILL[p] + " shadow-sm" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}
-                              >
-                                {p}
-                              </button>
-                            ))}
-                          </div>
-                        </Field>
-                        <Field
-                          label="Request Type"
-                          error={enrollErrors.ticketType}
-                        >
-                          <div className="flex gap-2">
-                            {TICKET_TYPES.map((tt) => (
-                              <button
-                                key={tt}
-                                onClick={() =>
-                                  setEnrollForm((f) => ({
-                                    ...f,
-                                    ticketType: tt,
-                                  }))
-                                }
-                                className={`flex-1 h-8 rounded-lg border text-xs font-bold transition-all ${enrollForm.ticketType === tt ? "bg-slate-900 text-white border-slate-900" : "border-slate-300 text-slate-600 hover:bg-slate-50"}`}
-                              >
-                                {tt}
-                              </button>
-                            ))}
-                          </div>
-                        </Field>
-                      </div>
-                      <AssigneeDropdown
-                        value={enrollForm.assignees || []}
+                      {/* Change 6: Request type shown as card-style for IT; Change 7: hidden for HR */}
+                      {!isHRTicket && (
+                        <div>
+                          <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+                            Request Type
+                          </label>
+                          <RequestTypeSelector
+                            value={enrollForm.ticketType || "Service Request"}
+                            onChange={(v) =>
+                              setEnrollForm((f) => ({ ...f, ticketType: v }))
+                            }
+                          />
+                          {enrollErrors.ticketType && (
+                            <p className="mt-1 text-xs text-red-600 font-semibold">
+                              {enrollErrors.ticketType}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Priority */}
+                      <PrioritySelector
+                        value={enrollForm.priority}
                         onChange={(v) =>
-                          setEnrollForm((f) => ({ ...f, assignees: v }))
+                          setEnrollForm((f) => ({ ...f, priority: v }))
                         }
-                        error={enrollErrors.assignees}
+                        error={enrollErrors.priority}
+                      />
+
+                      {/* Change 8: Single assignee */}
+                      <AssigneeDropdown
+                        value={enrollForm.assignee || null}
+                        onChange={(v) =>
+                          setEnrollForm((f) => ({ ...f, assignee: v }))
+                        }
+                        error={enrollErrors.assignee}
+                        label={
+                          isHRTicket ? "Assign HR Officer" : "Assign Engineer"
+                        }
                         employees={employees}
                       />
+
                       <div className="grid grid-cols-2 gap-3">
                         <Field
                           label="Start Date"
@@ -2633,7 +2760,8 @@ function TicketModal({
                             className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm focus:outline-none focus:border-slate-400"
                           />
                         </Field>
-                        {enrollForm.ticketType === "Incident" ? (
+                        {/* For HR tickets show ETA date only (no incident hours) */}
+                        {!isHRTicket && enrollForm.ticketType === "Incident" ? (
                           <Field
                             label="Expected Hours"
                             error={enrollErrors.etaHours}
@@ -2729,7 +2857,7 @@ function TicketModal({
                   </div>
                   <div className="mt-2 rounded-xl border border-slate-100 bg-white px-3 py-2.5">
                     <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                      Assignees
+                      Assignee
                     </p>
                     <p className="text-xs font-bold text-slate-700 mt-0.5">
                       {ticket.itAssignees?.join(", ") || "—"}
@@ -3027,6 +3155,7 @@ function TicketModal({
               {canAct &&
                 ticket.enrolledByIT &&
                 !isClosed &&
+                !isResolved &&
                 !isOnHold &&
                 !isWaiting &&
                 !isAssigned &&
@@ -3052,38 +3181,85 @@ function TicketModal({
                 )}
 
               {/* Quick actions */}
-              {canAct && ticket.enrolledByIT && !isClosed && !isAssigned && (
-                <Section
-                  title={isOnHold || isWaiting ? "Actions" : "Quick Actions"}
-                >
-                  <div className="mt-3 flex gap-2 flex-wrap">
-                    {!isOnHold && !isWaiting && isFullFlowIT && (
-                      <>
+              {canAct &&
+                ticket.enrolledByIT &&
+                !isClosed &&
+                !isResolved &&
+                !isAssigned && (
+                  <Section
+                    title={isOnHold || isWaiting ? "Actions" : "Quick Actions"}
+                  >
+                    <div className="mt-3 flex gap-2 flex-wrap">
+                      {!isOnHold && !isWaiting && isFullFlowIT && (
+                        <>
+                          <button
+                            onClick={onPutOnHold}
+                            className="flex items-center gap-2 h-9 px-4 rounded-xl bg-amber-100 text-amber-800 border border-amber-200 text-sm font-semibold hover:bg-amber-200"
+                          >
+                            <AlertCircle className="w-4 h-4" />
+                            Put On Hold
+                          </button>
+                          <button
+                            onClick={onWaitingForUserInput}
+                            className="flex items-center gap-2 h-9 px-4 rounded-xl bg-orange-100 text-orange-800 border border-orange-200 text-sm font-semibold hover:bg-orange-200"
+                          >
+                            <Timer className="w-4 h-4" />
+                            Waiting for User Input
+                          </button>
+                        </>
+                      )}
+                      {(isOnHold || isWaiting) && (
                         <button
-                          onClick={onPutOnHold}
-                          className="flex items-center gap-2 h-9 px-4 rounded-xl bg-amber-100 text-amber-800 border border-amber-200 text-sm font-semibold hover:bg-amber-200"
+                          onClick={() => onMoveStatus("In Progress")}
+                          className="flex items-center gap-2 h-9 px-4 rounded-xl bg-blue-100 text-blue-800 border border-blue-200 text-sm font-semibold hover:bg-blue-200"
                         >
-                          <AlertCircle className="w-4 h-4" />
-                          Put On Hold
+                          <Clock3 className="w-4 h-4" />
+                          Resume to In Progress
                         </button>
+                      )}
+                      {/* Change 9: Resolve action — appears before Close */}
+                      {!isOnHold && !isWaiting && (
                         <button
-                          onClick={onWaitingForUserInput}
-                          className="flex items-center gap-2 h-9 px-4 rounded-xl bg-orange-100 text-orange-800 border border-orange-200 text-sm font-semibold hover:bg-orange-200"
+                          onClick={onResolveTicket}
+                          className="flex items-center gap-2 h-9 px-4 rounded-xl bg-emerald-100 text-emerald-800 border border-emerald-200 text-sm font-semibold hover:bg-emerald-200"
                         >
-                          <Timer className="w-4 h-4" />
-                          Waiting for User Input
+                          <ThumbsUp className="w-4 h-4" />
+                          Mark Resolved
                         </button>
-                      </>
-                    )}
-                    {(isOnHold || isWaiting) && (
+                      )}
                       <button
-                        onClick={() => onMoveStatus("In Progress")}
-                        className="flex items-center gap-2 h-9 px-4 rounded-xl bg-blue-100 text-blue-800 border border-blue-200 text-sm font-semibold hover:bg-blue-200"
+                        onClick={onCloseTicket}
+                        className="flex items-center gap-2 h-9 px-4 rounded-xl bg-slate-800 text-white text-sm font-semibold hover:bg-slate-900"
                       >
-                        <Clock3 className="w-4 h-4" />
-                        Resume to In Progress
+                        <XCircle className="w-4 h-4" />
+                        Close Ticket
                       </button>
-                    )}
+                      {ticket.itAssignees?.length > 0 && !isClosed && (
+                        <button
+                          onClick={onReassign}
+                          className="flex items-center gap-2 h-9 px-4 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 text-sm font-semibold hover:bg-blue-100"
+                        >
+                          <RefreshCw className="w-4 h-4" />
+                          Reassign
+                        </button>
+                      )}
+                    </div>
+                  </Section>
+                )}
+
+              {canAct &&
+                ticket.enrolledByIT &&
+                !isClosed &&
+                !isResolved &&
+                isAssigned && (
+                  <div className="flex gap-2 mt-1 flex-wrap">
+                    <button
+                      onClick={onResolveTicket}
+                      className="flex items-center gap-2 h-9 px-4 rounded-xl bg-emerald-100 text-emerald-800 border border-emerald-200 text-sm font-semibold hover:bg-emerald-200"
+                    >
+                      <ThumbsUp className="w-4 h-4" />
+                      Mark Resolved
+                    </button>
                     <button
                       onClick={onCloseTicket}
                       className="flex items-center gap-2 h-9 px-4 rounded-xl bg-slate-800 text-white text-sm font-semibold hover:bg-slate-900"
@@ -3091,7 +3267,7 @@ function TicketModal({
                       <XCircle className="w-4 h-4" />
                       Close Ticket
                     </button>
-                    {ticket.itAssignees?.length > 0 && !isClosed && (
+                    {ticket.itAssignees?.length > 0 && (
                       <button
                         onClick={onReassign}
                         className="flex items-center gap-2 h-9 px-4 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 text-sm font-semibold hover:bg-blue-100"
@@ -3101,26 +3277,59 @@ function TicketModal({
                       </button>
                     )}
                   </div>
-                </Section>
-              )}
+                )}
 
-              {canAct && ticket.enrolledByIT && !isClosed && isAssigned && (
-                <div className="flex gap-2 mt-1">
-                  <button
-                    onClick={onCloseTicket}
-                    className="flex items-center gap-2 h-9 px-4 rounded-xl bg-slate-800 text-white text-sm font-semibold hover:bg-slate-900"
-                  >
-                    <XCircle className="w-4 h-4" />
-                    Close Ticket
-                  </button>
-                  {ticket.itAssignees?.length > 0 && (
-                    <button
-                      onClick={onReassign}
-                      className="flex items-center gap-2 h-9 px-4 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 text-sm font-semibold hover:bg-blue-100"
-                    >
-                      <RefreshCw className="w-4 h-4" />
-                      Reassign
-                    </button>
+              {/* Change 9: Resolved state — waiting for user green flag */}
+              {isResolved && !isClosed && (
+                <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4">
+                  <div className="flex items-start gap-3">
+                    <ThumbsUp className="w-5 h-5 text-emerald-600 flex-none mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-sm font-bold text-emerald-800">
+                        Marked as Resolved
+                      </p>
+                      <p className="text-xs text-emerald-600 mt-0.5">
+                        Awaiting user confirmation. Once the user confirms the
+                        issue is resolved, this ticket can be closed.
+                      </p>
+                      {ticket.resolvedNote && (
+                        <div className="mt-2 rounded-xl bg-white/70 border border-emerald-100 px-3 py-2.5">
+                          <p className="text-sm text-slate-700">
+                            "{ticket.resolvedNote}"
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {canAct && (
+                    <div className="mt-3 flex gap-2 flex-wrap">
+                      <button
+                        onClick={onCloseTicket}
+                        className="flex items-center gap-2 h-9 px-4 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                        User Confirmed — Close Ticket
+                      </button>
+                      <button
+                        onClick={() => onMoveStatus("In Progress")}
+                        className="flex items-center gap-2 h-9 px-4 rounded-xl bg-white border border-emerald-300 text-emerald-800 text-sm font-semibold hover:bg-emerald-50"
+                      >
+                        <Clock3 className="w-4 h-4" />
+                        Re-open (needs more work)
+                      </button>
+                    </div>
+                  )}
+                  {/* User (non-IT/HR) can confirm resolution */}
+                  {!canAct && !isIT && !isHR && (
+                    <div className="mt-3 flex gap-2 flex-wrap">
+                      <button
+                        onClick={onCloseTicket}
+                        className="flex items-center gap-2 h-9 px-4 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                        Confirm Resolved — Close Ticket
+                      </button>
+                    </div>
                   )}
                 </div>
               )}
@@ -3348,7 +3557,8 @@ export default function HelpdeskPage() {
   const [tickets, setTickets] = useState([]);
   const [ticketsLoading, setTicketsLoading] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
-  const [orgFilter, setOrgFilter] = useState(currentUser.org_Id || "IML");
+  // Change 5: Default org filter "All"
+  const [orgFilter, setOrgFilter] = useState("All");
   const [catalogRaw, setCatalogRaw] = useState([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [employees, setEmployees] = useState([]);
@@ -3358,16 +3568,15 @@ export default function HelpdeskPage() {
   const [enrollLoading, setEnrollLoading] = useState(false);
   const [msgLoading, setMsgLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [excelModalOpen, setExcelModalOpen] = useState(false); // Excel download modal
+  const [excelModalOpen, setExcelModalOpen] = useState(false);
 
-  // Ticket detail sub-data
   const [ticketMessages, setTicketMessages] = useState({});
   const [ticketStrikes, setTicketStrikes] = useState({});
   const [ticketHistory, setTicketHistory] = useState({});
 
   // Modal state
   const [enrollForm, setEnrollForm] = useState({
-    assignees: [],
+    assignee: null, // Change 8: single engineer
     itStartDate: todayISO(),
     etaDate: "",
     etaHours: "",
@@ -3385,6 +3594,11 @@ export default function HelpdeskPage() {
   const [closeModal, setCloseModal] = useState(false);
   const [closeNote, setCloseNote] = useState("");
   const [closeError, setCloseError] = useState("");
+  // Change 9: Resolve modal
+  const [resolveModal, setResolveModal] = useState(false);
+  const [resolveNote, setResolveNote] = useState("");
+  const [resolveError, setResolveError] = useState("");
+
   const [strikeForm, setStrikeForm] = useState({ mailId: "", note: "" });
   const [strikeErrors, setStrikeErrors] = useState({});
   const [responseForm, setResponseForm] = useState({});
@@ -3394,7 +3608,7 @@ export default function HelpdeskPage() {
     remarks: "",
   });
   const [reassignModal, setReassignModal] = useState(false);
-  const [reassignees, setReassignees] = useState([]);
+  const [reassignee, setReassignee] = useState(null); // Change 8: single
   const [editTypeModal, setEditTypeModal] = useState(false);
   const [editPriorityModal, setEditPriorityModal] = useState(false);
 
@@ -3405,10 +3619,21 @@ export default function HelpdeskPage() {
     setTicketsLoading(true);
     try {
       const payload = isIT
-        ? { dept: "IT", empId: currentUser.emp_Id, org: orgFilter }
+        ? {
+            dept: "IT",
+            empId: currentUser.emp_Id,
+            org: orgFilter === "All" ? "" : orgFilter,
+          }
         : isHR
-          ? { dept: "HR", empId: currentUser.emp_Id, org: orgFilter }
-          : { empId: currentUser.emp_Id, org: orgFilter };
+          ? {
+              dept: "HR",
+              empId: currentUser.emp_Id,
+              org: orgFilter === "All" ? "" : orgFilter,
+            }
+          : {
+              empId: currentUser.emp_Id,
+              org: orgFilter === "All" ? "" : orgFilter,
+            };
       const res = await ITHelpdeskService.getTickets(payload);
       setTickets((res?.data || []).map(mapApiTicket));
     } catch (e) {
@@ -3451,7 +3676,7 @@ export default function HelpdeskPage() {
     fetchTickets();
   }, [fetchTickets]);
 
-  // ── Fetch detail data when selecting ──
+  // ── Fetch detail data ──
   useEffect(() => {
     if (!selectedId) return;
     const loadDetail = async () => {
@@ -3492,7 +3717,7 @@ export default function HelpdeskPage() {
   // Reset forms on ticket change
   useEffect(() => {
     setEnrollForm({
-      assignees: [],
+      assignee: null,
       itStartDate: todayISO(),
       etaDate: "",
       etaHours: "",
@@ -3503,12 +3728,13 @@ export default function HelpdeskPage() {
     setEnrollErrors({});
     setHoldModal(false);
     setCloseModal(false);
+    setResolveModal(false);
     setStrikeForm({ mailId: "", note: "" });
     setStrikeErrors({});
     setResponseForm({});
     setStageRemarksModal({ open: false, targetStatus: "", remarks: "" });
     setReassignModal(false);
-    setReassignees([]);
+    setReassignee(null);
     setEditTypeModal(false);
     setEditPriorityModal(false);
   }, [selectedId]);
@@ -3557,7 +3783,7 @@ export default function HelpdeskPage() {
         description: fields.description,
         org: currentUser.org_Id,
         submitted_by: currentUser.emp_Id,
-        priority: "",
+        priority: fields.priority || "",
         parent_ticket_id: fields.parentId || "",
         file: fields.attachment || null,
       };
@@ -3572,15 +3798,16 @@ export default function HelpdeskPage() {
     }
   };
 
-  // ── Enroll ──
+  // ── Enroll — Change 8: single assignee ──
   const enrollTicket = async () => {
     const errs = {};
-    if (!enrollForm.assignees?.length)
-      errs.assignees = "At least one assignee required.";
+    if (!enrollForm.assignee) errs.assignee = "Please select an assignee.";
     if (!enrollForm.itStartDate) errs.itStartDate = "Start date required.";
     if (!enrollForm.priority) errs.priority = "Priority required.";
-    if (!enrollForm.ticketType) errs.ticketType = "Ticket type required.";
-    const isInc = enrollForm.ticketType === "Incident";
+    const isHRTicket = sel?.ticketDept === "HR";
+    if (!isHRTicket && !enrollForm.ticketType)
+      errs.ticketType = "Ticket type required.";
+    const isInc = !isHRTicket && enrollForm.ticketType === "Incident";
     if (isInc && !enrollForm.etaHours)
       errs.etaHours = "Expected hours required.";
     if (!isInc && !enrollForm.etaDate) errs.etaDate = "ETA required.";
@@ -3589,12 +3816,11 @@ export default function HelpdeskPage() {
 
     setEnrollLoading(true);
     try {
-      const assignedIds = enrollForm.assignees.map((e) => e.emp_Id).join(",");
       await ITHelpdeskService.enrollTicket({
         ticket_Id: sel.id,
         priority: enrollForm.priority,
-        req_Type: enrollForm.ticketType,
-        assigned_Person: assignedIds,
+        req_Type: isHRTicket ? "Service Request" : enrollForm.ticketType,
+        assigned_Person: JSON.stringify(enrollForm.assignee.emp_Id),
         eta_Date: enrollForm.etaDate || null,
         eta_Time: enrollForm.etaHours || "",
         remarks: enrollForm.itRemarks.trim(),
@@ -3676,6 +3902,33 @@ export default function HelpdeskPage() {
       await fetchTickets();
     } catch (e) {
       console.error("Waiting error:", e);
+    }
+  };
+
+  // ── Resolve (Change 9) ──
+  const submitResolve = async () => {
+    if (!resolveNote.trim()) {
+      setResolveError("Resolution note is required.");
+      return;
+    }
+    setResolveError("");
+    try {
+      await ITHelpdeskService.updateTicketStatus({
+        ticket_Id: sel.id,
+        status: "Resolved",
+        remarks: resolveNote.trim(),
+        updated_By: currentUser.emp_Id,
+      });
+      patchLocal(sel.id, {
+        status: "Resolved",
+        resolvedNote: resolveNote.trim(),
+      });
+      setResolveModal(false);
+      setResolveNote("");
+      setSelectedId(null);
+      await fetchTickets();
+    } catch (e) {
+      console.error("Resolve error:", e);
     }
   };
 
@@ -3814,19 +4067,19 @@ export default function HelpdeskPage() {
     setStageRemarksModal({ open: false, targetStatus: "", remarks: "" });
   };
 
-  // ── Reassign ──
+  // ── Reassign — Change 8: single ──
   const submitReassign = async () => {
-    if (!reassignees.length) return;
+    if (!reassignee) return;
     try {
       await ITHelpdeskService.reassignTicket({
         ticket_Id: sel.id,
-        assigned_Person: reassignees.map((e) => e.emp_Id).join(","),
+        assigned_Person: reassignee.emp_Id,
         updated_By: currentUser.emp_Id,
         remarks: "",
       });
       patchLocal(sel.id, {
-        itAssignees: reassignees.map((e) => e.emp_Name),
-        itAssigneeIds: reassignees.map((e) => String(e.emp_Id)),
+        itAssignees: [reassignee.emp_Name],
+        itAssigneeIds: [String(reassignee.emp_Id)],
       });
       setReassignModal(false);
       await fetchTickets();
@@ -3880,12 +4133,13 @@ export default function HelpdeskPage() {
     window.location.href = "/";
   };
 
-  // ── Kanban columns ──
+  // ── Kanban columns — Change 9: Resolved column added ──
   const visibleTickets = useMemo(() => {
     let base = tickets;
     if (isIT) base = base.filter((t) => t.ticketDept === "IT");
     if (isHR) base = base.filter((t) => t.ticketDept === "HR");
-    if ((isIT || isHR) && orgFilter)
+    // Change 5: "All" shows all orgs
+    if ((isIT || isHR) && orgFilter && orgFilter !== "All")
       base = base.filter((t) => t.org === orgFilter);
     return base;
   }, [tickets, isIT, isHR, orgFilter]);
@@ -3904,6 +4158,7 @@ export default function HelpdeskPage() {
       inProgress: base.filter((t) => t.status === "In Progress").length,
       onHold: base.filter((t) => t.status === "On Hold").length,
       waiting: base.filter((t) => t.status === "Waiting for User Input").length,
+      resolved: base.filter((t) => t.status === "Resolved").length,
       closed: base.filter((t) => t.status === "Closed").length,
       overdue,
     };
@@ -3918,6 +4173,7 @@ export default function HelpdeskPage() {
       (t) =>
         t.enrolledByIT &&
         t.status !== "Closed" &&
+        t.status !== "Resolved" &&
         !TESTING_STATUSES.includes(t.status) &&
         t.status !== "On Hold" &&
         t.status !== "Waiting for User Input" &&
@@ -3949,6 +4205,7 @@ export default function HelpdeskPage() {
       (t) =>
         t.status === "On Hold" && FULL_FLOW_CATEGORIES.includes(t.category),
     );
+    const resolvedCol = visibleTickets.filter((t) => t.status === "Resolved"); // Change 9
     const closedCol = visibleTickets.filter((t) => t.status === "Closed");
     return [
       {
@@ -4026,6 +4283,14 @@ export default function HelpdeskPage() {
           ]
         : []),
       {
+        key: "resolved",
+        label: "Resolved",
+        meta: STATUS_META["Resolved"],
+        items: resolvedCol,
+        subtitle: "Awaiting user confirmation",
+        accent: "emerald",
+      }, // Change 9
+      {
         key: "closed",
         label: "Closed",
         meta: STATUS_META["Closed"],
@@ -4085,6 +4350,14 @@ export default function HelpdeskPage() {
         subtitle: "My active work",
         accent: "indigo",
       },
+      {
+        key: "hr_resolved",
+        label: "Resolved",
+        meta: STATUS_META["Resolved"],
+        items: visibleTickets.filter((t) => t.status === "Resolved"),
+        subtitle: "Awaiting confirmation",
+        accent: "emerald",
+      }, // Change 9
       {
         key: "hr_closed",
         label: "Closed",
@@ -4165,6 +4438,13 @@ export default function HelpdeskPage() {
     .cb-hr{background:#4338ca;color:#fff;border-radius:1rem 1rem 0.25rem 1rem;padding:.5rem .875rem;max-width:78%;font-size:.8125rem;line-height:1.5;}
     .cb-user{background:#f1f5f9;color:#1e293b;border-radius:1rem 1rem 1rem 0.25rem;padding:.5rem .875rem;max-width:78%;font-size:.8125rem;line-height:1.5;}
     .cb-self{background:#3b82f6;color:#fff;border-radius:1rem 1rem 0.25rem 1rem;padding:.5rem .875rem;max-width:78%;font-size:.8125rem;line-height:1.5;}
+    @media(max-width:640px){
+      .modal-box{max-height:98vh;border-radius:.75rem;}
+      .mini-modal{max-width:100%!important;}
+    }
+    @media(max-width:480px){
+      .modal-overlay{padding:.5rem;}
+    }
   `;
 
   // ─── User view ──────────────────────────────────────────────────────────────
@@ -4221,6 +4501,11 @@ export default function HelpdeskPage() {
               setCloseError("");
               setCloseModal(true);
             }}
+            onResolveTicket={() => {
+              setResolveNote("");
+              setResolveError("");
+              setResolveModal(true);
+            }}
             strikeForm={strikeForm}
             setStrikeForm={setStrikeForm}
             strikeErrors={strikeErrors}
@@ -4234,7 +4519,7 @@ export default function HelpdeskPage() {
             onSendMsg={sendMessage}
             msgLoading={msgLoading}
             onReassign={() => {
-              setReassignees([]);
+              setReassignee(null);
               setReassignModal(true);
             }}
             onEditType={() => setEditTypeModal(true)}
@@ -4272,10 +4557,10 @@ export default function HelpdeskPage() {
     <>
       <style>{globalStyles}</style>
       <div className="h-screen overflow-hidden bg-slate-100 text-slate-900 flex flex-col">
-        {/* Header */}
+        {/* Header — mobile responsive (Change 4) */}
         <header className="flex-none border-b border-slate-200 bg-white shadow-sm">
-          <div className="mx-auto max-w-[1900px] px-5 py-3">
-            <div className="flex items-center justify-between gap-4">
+          <div className="mx-auto max-w-[1900px] px-3 sm:px-5 py-3">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center flex-none">
                   {isHR ? (
@@ -4285,20 +4570,21 @@ export default function HelpdeskPage() {
                   )}
                 </div>
                 <div>
-                  <h1 className="text-lg font-extrabold tracking-tight text-slate-900 leading-tight">
-                    {isHR ? "HR" : "IT"} Helpdesk · Enlife System
+                  <h1 className="text-base sm:text-lg font-extrabold tracking-tight text-slate-900 leading-tight">
+                    {isHR ? "HR" : "IT"} Helpdesk · Enlife
                   </h1>
-                  <p className="text-[11px] text-slate-500 font-medium">
+                  <p className="text-[11px] text-slate-500 font-medium hidden sm:block">
                     Category-driven ticket management
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Change 3: name box teal, distinct from IT ticket button */}
                 <div
-                  className={`flex items-center gap-2 rounded-xl px-3 py-2 border ${isHR ? "border-indigo-200 bg-indigo-50" : "border-blue-200 bg-blue-50"}`}
+                  className={`flex items-center gap-2 rounded-xl px-3 py-2 border ${isHR ? "border-indigo-200 bg-indigo-50" : "border-teal-200 bg-teal-50"}`}
                 >
                   <div
-                    className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black ${isHR ? "bg-indigo-500" : "bg-blue-500"} text-white`}
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black ${isHR ? "bg-indigo-500" : "bg-teal-500"} text-white`}
                   >
                     {currentUser.emp_Name
                       .split(" ")
@@ -4307,7 +4593,7 @@ export default function HelpdeskPage() {
                       .slice(0, 2)
                       .toUpperCase()}
                   </div>
-                  <div>
+                  <div className="hidden sm:block">
                     <p className="text-xs font-bold text-slate-800 leading-none">
                       {currentUser.emp_Name}
                     </p>
@@ -4317,31 +4603,28 @@ export default function HelpdeskPage() {
                   </div>
                 </div>
 
-                {/* Both IT and HR can raise both ticket types — from prototype */}
+                {/* Change 3: IT ticket button sky-blue (different from teal name box) */}
                 <button
                   onClick={() => setCreateITOpen(true)}
-                  className="inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 transition-colors"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-xl px-3 sm:px-4 text-xs sm:text-sm font-bold text-white bg-sky-600 hover:bg-sky-700 transition-colors"
                 >
                   <Wrench className="h-3.5 w-3.5" />
-                  {isIT ? "IT Ticket" : "IT Ticket"}
+                  <span className="hidden sm:inline">IT </span>Ticket
                 </button>
                 <button
                   onClick={() => setCreateHROpen(true)}
-                  className="inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-xl px-3 sm:px-4 text-xs sm:text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
                 >
                   <Briefcase className="h-3.5 w-3.5" />
-                  HR Ticket
+                  <span className="hidden sm:inline">HR </span>Ticket
                 </button>
-
-                {/* Excel Download — IT/HR only */}
                 <button
                   onClick={() => setExcelModalOpen(true)}
-                  className={`inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-bold border transition-colors ${isHR ? "border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100" : "border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100"}`}
+                  className={`inline-flex h-9 items-center gap-1.5 rounded-xl px-3 sm:px-4 text-xs sm:text-sm font-bold border transition-colors ${isHR ? "border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100" : "border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100"}`}
                 >
                   <Download className="h-3.5 w-3.5" />
-                  Export
+                  <span className="hidden sm:inline">Export</span>
                 </button>
-
                 <button
                   onClick={handleLogout}
                   className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-300 px-3 text-sm font-semibold text-slate-600 hover:bg-slate-50"
@@ -4351,31 +4634,38 @@ export default function HelpdeskPage() {
               </div>
             </div>
 
-            {/* Org filter + stats */}
-            <div className="mt-3 flex items-center justify-between flex-wrap gap-3">
-              <div className="flex items-center gap-2">
+            {/* Org filter — Change 5: default All, 4 options */}
+            <div className="mt-2 sm:mt-3 flex items-center justify-between flex-wrap gap-2 sm:gap-3">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Filter className="w-3.5 h-3.5 text-slate-400" />
                 <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
                   Org:
                 </span>
-                {["IML", "CSIL", "Daedalus"].map((org) => (
+                {["All", "IML", "CSIL", "Daedalus"].map((org) => (
                   <button
                     key={org}
                     onClick={() => setOrgFilter(org)}
-                    className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all ${orgFilter === org ? ORG_PILL[org] + " shadow-sm" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}
+                    className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all ${
+                      orgFilter === org
+                        ? org === "All"
+                          ? "bg-slate-800 text-white border-slate-800"
+                          : ORG_PILL[org] + " shadow-sm"
+                        : "border-slate-200 text-slate-500 hover:bg-slate-50"
+                    }`}
                   >
                     {org}
                   </button>
                 ))}
                 <button
                   onClick={fetchTickets}
-                  className="ml-2 w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:bg-slate-50 hover:text-slate-600"
+                  className="ml-1 w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:bg-slate-50 hover:text-slate-600"
                 >
                   <RefreshCw
                     className={`w-3.5 h-3.5 ${ticketsLoading ? "animate-spin" : ""}`}
                   />
                 </button>
               </div>
+              {/* Stats — mobile responsive (Change 4) */}
               <div className="flex flex-wrap gap-2 items-center">
                 {[
                   { l: "Total", v: stats.total, t: "slate" },
@@ -4387,17 +4677,18 @@ export default function HelpdeskPage() {
                         { l: "Waiting", v: stats.waiting, t: "orange" },
                       ]
                     : []),
+                  { l: "Resolved", v: stats.resolved, t: "emerald" },
                   { l: "Closed", v: stats.closed, t: "slate" },
                   { l: "Overdue", v: stats.overdue, t: "red" },
                 ].map((s) => (
                   <div
                     key={s.l}
-                    className={`rounded-xl border px-3 py-2 ${s.t === "red" ? "bg-red-50 border-red-200 text-red-700" : s.t === "blue" ? "bg-blue-50 border-blue-200 text-blue-700" : s.t === "amber" ? "bg-amber-50 border-amber-200 text-amber-700" : s.t === "orange" ? "bg-orange-50 border-orange-200 text-orange-700" : "bg-slate-50 border-slate-200 text-slate-700"}`}
+                    className={`rounded-xl border px-2 sm:px-3 py-1.5 sm:py-2 ${s.t === "red" ? "bg-red-50 border-red-200 text-red-700" : s.t === "blue" ? "bg-blue-50 border-blue-200 text-blue-700" : s.t === "amber" ? "bg-amber-50 border-amber-200 text-amber-700" : s.t === "orange" ? "bg-orange-50 border-orange-200 text-orange-700" : s.t === "emerald" ? "bg-emerald-50 border-emerald-200 text-emerald-700" : "bg-slate-50 border-slate-200 text-slate-700"}`}
                   >
                     <p className="text-[10px] font-bold uppercase tracking-widest opacity-60">
                       {s.l}
                     </p>
-                    <p className="text-xl font-extrabold leading-none mt-0.5">
+                    <p className="text-lg sm:text-xl font-extrabold leading-none mt-0.5">
                       {s.v}
                     </p>
                   </div>
@@ -4408,7 +4699,7 @@ export default function HelpdeskPage() {
         </header>
 
         {/* Kanban board */}
-        <main className="flex-1 overflow-x-auto overflow-y-hidden p-4 min-h-0">
+        <main className="flex-1 overflow-x-auto overflow-y-hidden p-3 sm:p-4 min-h-0">
           {ticketsLoading && !tickets.length ? (
             <div className="flex items-center justify-center h-full text-slate-400">
               <Loader2 className="w-8 h-8 animate-spin mr-3" />
@@ -4518,6 +4809,11 @@ export default function HelpdeskPage() {
             setCloseError("");
             setCloseModal(true);
           }}
+          onResolveTicket={() => {
+            setResolveNote("");
+            setResolveError("");
+            setResolveModal(true);
+          }}
           strikeForm={strikeForm}
           setStrikeForm={setStrikeForm}
           strikeErrors={strikeErrors}
@@ -4531,10 +4827,10 @@ export default function HelpdeskPage() {
           onSendMsg={sendMessage}
           msgLoading={msgLoading}
           onReassign={() => {
-            setReassignees(
-              employees.filter((e) =>
+            setReassignee(
+              employees.find((e) =>
                 sel.itAssigneeIds?.includes(String(e.emp_Id)),
-              ),
+              ) || null,
             );
             setReassignModal(true);
           }}
@@ -4707,6 +5003,69 @@ export default function HelpdeskPage() {
         </div>
       )}
 
+      {/* Change 9: Resolve modal */}
+      {resolveModal && (
+        <div
+          className="modal-overlay"
+          onClick={(e) =>
+            e.target === e.currentTarget && setResolveModal(false)
+          }
+        >
+          <div className="mini-modal p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                  <ThumbsUp className="w-4 h-4 text-emerald-600" />
+                  Mark as Resolved
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Add resolution note. User will need to confirm before closing.
+                </p>
+              </div>
+              <button
+                onClick={() => setResolveModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <Field label="Resolution Note" error={resolveError}>
+              <textarea
+                rows={4}
+                value={resolveNote}
+                onChange={(e) => setResolveNote(e.target.value)}
+                placeholder="What was done to resolve this? Steps taken, outcome…"
+                className="w-full rounded-xl border border-emerald-300 bg-white px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500 resize-none"
+              />
+            </Field>
+            <div className="mt-3 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-700">
+              <p className="font-bold mb-0.5">What happens next?</p>
+              <p>
+                Ticket moves to <b>Resolved</b>. The user/requester will be
+                asked to confirm the resolution. Once confirmed, the ticket
+                moves to <b>Closed</b>. You can also re-open it if more work is
+                needed.
+              </p>
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={() => setResolveModal(false)}
+                className="flex-1 h-10 rounded-xl border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitResolve}
+                className="flex-1 h-10 rounded-xl bg-emerald-600 text-sm font-bold text-white hover:bg-emerald-700 flex items-center justify-center gap-2"
+              >
+                <ThumbsUp className="w-4 h-4" />
+                Mark Resolved
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Close modal */}
       {closeModal && (
         <div
@@ -4758,7 +5117,7 @@ export default function HelpdeskPage() {
         </div>
       )}
 
-      {/* Reassign modal */}
+      {/* Reassign modal — Change 8: single select */}
       {reassignModal && (
         <div
           className="modal-overlay"
@@ -4773,7 +5132,7 @@ export default function HelpdeskPage() {
                   Reassign
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Select engineers.
+                  Select an engineer.
                 </p>
               </div>
               <button
@@ -4784,10 +5143,10 @@ export default function HelpdeskPage() {
               </button>
             </div>
             <AssigneeDropdown
-              value={reassignees}
-              onChange={setReassignees}
+              value={reassignee}
+              onChange={setReassignee}
               employees={employees}
-              label="Select Engineers"
+              label="Select Engineer"
             />
             <div className="flex gap-2 mt-4">
               <button
@@ -4798,7 +5157,7 @@ export default function HelpdeskPage() {
               </button>
               <button
                 onClick={submitReassign}
-                disabled={!reassignees.length}
+                disabled={!reassignee}
                 className="flex-1 h-10 rounded-xl bg-blue-600 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 <UserCheck className="w-4 h-4" />
@@ -4809,7 +5168,7 @@ export default function HelpdeskPage() {
         </div>
       )}
 
-      {/* Edit Type modal */}
+      {/* Edit Type modal — Change 6: card style */}
       {editTypeModal && sel && (
         <div
           className="modal-overlay"
@@ -4819,9 +5178,15 @@ export default function HelpdeskPage() {
         >
           <div className="mini-modal p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-extrabold text-slate-900">
-                Change Request Type
-              </h2>
+              <div>
+                <h2 className="text-base font-extrabold text-slate-900">
+                  Change Request Type
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Current:{" "}
+                  <span className="font-bold">{sel.requestType || "—"}</span>
+                </p>
+              </div>
               <button
                 onClick={() => setEditTypeModal(false)}
                 className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"
@@ -4829,17 +5194,10 @@ export default function HelpdeskPage() {
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              {TICKET_TYPES.map((tt) => (
-                <button
-                  key={tt}
-                  onClick={() => submitEditType(tt)}
-                  className={`h-12 rounded-xl border text-sm font-bold transition-all ${sel.requestType === tt ? "bg-slate-900 text-white border-slate-900" : tt === "Incident" ? "border-red-200 text-red-700 hover:bg-red-50" : "border-sky-200 text-sky-700 hover:bg-sky-50"}`}
-                >
-                  {tt}
-                </button>
-              ))}
-            </div>
+            <RequestTypeSelector
+              value={sel.requestType || "Service Request"}
+              onChange={(nt) => submitEditType(nt)}
+            />
           </div>
         </div>
       )}
@@ -4854,9 +5212,15 @@ export default function HelpdeskPage() {
         >
           <div className="mini-modal p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-extrabold text-slate-900">
-                Change Priority
-              </h2>
+              <div>
+                <h2 className="text-base font-extrabold text-slate-900">
+                  Change Priority
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Current:{" "}
+                  <span className="font-bold">{sel.priority || "—"}</span>
+                </p>
+              </div>
               <button
                 onClick={() => setEditPriorityModal(false)}
                 className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"
@@ -4865,15 +5229,45 @@ export default function HelpdeskPage() {
               </button>
             </div>
             <div className="space-y-2">
-              {PRIORITIES.map((p) => (
-                <button
-                  key={p}
-                  onClick={() => submitEditPriority(p)}
-                  className={`w-full h-10 rounded-xl border text-sm font-bold transition-all ${sel.priority === p ? PRIORITY_PILL[p] + " shadow-sm" : (PRIORITY_PILL[p] || "") + " opacity-60 hover:opacity-100"}`}
-                >
-                  {p}
-                </button>
-              ))}
+              {PRIORITIES.map((p) => {
+                const isSel = sel.priority === p;
+                const cfg = {
+                  Critical: {
+                    base: "border-red-200 bg-red-50/60",
+                    active: "border-red-500 bg-red-50 ring-2 ring-red-100",
+                    txt: "text-red-700",
+                    detail: "text-red-500",
+                  },
+                  Medium: {
+                    base: "border-amber-200 bg-amber-50/60",
+                    active:
+                      "border-amber-500 bg-amber-50 ring-2 ring-amber-100",
+                    txt: "text-amber-700",
+                    detail: "text-amber-500",
+                  },
+                  Normal: {
+                    base: "border-blue-200 bg-blue-50/60",
+                    active: "border-blue-500 bg-blue-50 ring-2 ring-blue-100",
+                    txt: "text-blue-700",
+                    detail: "text-blue-500",
+                  },
+                }[p];
+                return (
+                  <button
+                    key={p}
+                    onClick={() => submitEditPriority(p)}
+                    className={`w-full rounded-xl border-2 px-4 py-3 text-left transition-all flex items-center justify-between ${isSel ? cfg.active : cfg.base + " hover:opacity-80"}`}
+                  >
+                    <div>
+                      <p className={`text-sm font-bold ${cfg.txt}`}>{p}</p>
+                      <p className={`text-[11px] mt-0.5 ${cfg.detail}`}>
+                        {PRIORITY_DETAILS[p]}
+                      </p>
+                    </div>
+                    {isSel && <CheckCircle2 className={`w-4 h-4 ${cfg.txt}`} />}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -4901,7 +5295,7 @@ export default function HelpdeskPage() {
         />
       )}
 
-      {/* Excel Download Modal — IT/HR only */}
+      {/* Excel Download Modal */}
       {excelModalOpen && (
         <ExcelDownloadModal
           onClose={() => setExcelModalOpen(false)}
