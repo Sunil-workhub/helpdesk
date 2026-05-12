@@ -2941,7 +2941,7 @@ function UserDashboard({
             {/* Change 3: IT button color matched to background of avatar box color */}
             <button
               onClick={onCreateITTicket}
-              className="inline-flex h-9 items-center gap-2 rounded-xl px-3 sm:px-4 text-sm font-bold text-white bg-slate-700 hover:bg-slate-900 transition-colors"
+              className="inline-flex h-9 items-center gap-2 rounded-xl px-3 sm:px-4 text-sm font-bold text-white bg-blue-700 hover:bg-blue-900 transition-colors"
             >
               <Wrench className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">IT Ticket</span>
@@ -4746,7 +4746,7 @@ export default function App() {
                     {/* Change 3: IT ticket button color = slate-700 (different from teal avatar) */}
                     <button
                       onClick={() => setCreateITOpen(true)}
-                      className="inline-flex h-9 items-center gap-2 rounded-xl px-3 sm:px-4 text-sm font-bold text-white bg-slate-700 hover:bg-slate-900 transition-colors"
+                      className="inline-flex h-9 items-center gap-2 rounded-xl px-3 sm:px-4 text-sm font-bold text-white bg-blue-700 hover:bg-blue-900 transition-colors"
                     >
                       <Plus className="h-4 w-4" />
                       <span className="hidden sm:inline">IT Ticket</span>
@@ -4764,7 +4764,7 @@ export default function App() {
                   <>
                     <button
                       onClick={() => setCreateITOpen(true)}
-                      className="inline-flex h-9 items-center gap-2 rounded-xl px-3 sm:px-4 text-sm font-bold text-white bg-slate-700 hover:bg-slate-900 transition-colors"
+                      className="inline-flex h-9 items-center gap-2 rounded-xl px-3 sm:px-4 text-sm font-bold text-white bg-blue-700 hover:bg-blue-900 transition-colors"
                     >
                       <Wrench className="h-4 w-4" />
                       <span className="hidden sm:inline">IT Ticket</span>
