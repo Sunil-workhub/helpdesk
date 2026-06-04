@@ -6,28 +6,38 @@ import Layout from "../pages/layout/Layout";
 import RedirectHandler from "./RedirectHandler";
 import LoginPage from "../pages/auth/LoginPage";
 
+// Helper function to thoroughly validate a user session structure
+const isValidUserSession = () => {
+  const userRaw = sessionStorage.getItem("user");
+  if (!userRaw) return false;
+
+  try {
+    const userData = JSON.parse(userRaw);
+    // Ensure the parsed JSON object contains your structural employee metrics
+    return (
+      userData && typeof userData === "object" && userData.emp_Id !== undefined
+    );
+  } catch (e) {
+    // If JSON parsing fails (e.g. string is manual text garbage), clear it out
+    sessionStorage.removeItem("user");
+    return false;
+  }
+};
+
+const ProtectedRoute = ({ children }) => {
+  return isValidUserSession() ? (
+    children
+  ) : (
+    <Navigate to="/helpdesk-login" replace />
+  );
+};
+
 const AppRoutes = () => {
   return (
     <BrowserRouter>
       <Routes>
-        {/* 🔓 Public Route (no auth) */}
-
-        {/* <Route
-          path="/RFQ-vendor"
-          element={
-            <Suspense
-              fallback={
-                <div>
-                  <RedirectHandler />
-                </div>
-              }
-            >
-              <RFQVendorResponsePage />
-            </Suspense>
-          }
-        /> */}
         <Route
-          path="/"
+          path="/helpdesk-login"
           element={
             <Suspense
               fallback={
@@ -44,9 +54,9 @@ const AppRoutes = () => {
         {/* 🔒 Protected Routes (auth required) */}
         <Route
           element={
-            <>
+            <ProtectedRoute>
               <Layout />
-            </>
+            </ProtectedRoute>
           }
         >
           {menuConfig.map(({ path, component: Component }) => (
@@ -67,6 +77,7 @@ const AppRoutes = () => {
             />
           ))}
         </Route>
+        <Route path="*" element={<Navigate to="/helpdesk-login" replace />} />
       </Routes>
     </BrowserRouter>
   );

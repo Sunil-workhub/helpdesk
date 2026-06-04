@@ -1,16 +1,4 @@
-// HelpdeskPage.jsx — API-bound Helpdesk (IT + HR) — UPDATED v2
-// Changes applied:
-// 1. Create ticket: description moved after category, ticket type before attachment
-// 2. Create ticket: priority added (Critical/Medium/Normal) with detail shown on select
-// 3. IT ticket button color matches name-shortener bg; name-shortener gets distinct color
-// 4. Mobile responsiveness improvements
-// 5. Org filter default "All" with 4 options
-// 6. Ticket enroll: req type shown same as create modal (card-style), shows selected + option to change
-// 7. HR ticket enroll: no Incident/Service type selector
-// 8. Single engineer assignment (no multi-select)
-// 9. New "Resolved" status/column before Closed; user can green-flag → Closed
-// 10. Excel: Status & Priority first columns; single sheet summary+detail; frozen header row
-
+// HelpdeskPage.jsx — API-bound Helpdesk (IT + HR) — Updated with kanban/acceptance/category changes
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import * as XLSX from "xlsx";
 import {
@@ -56,6 +44,8 @@ import {
   ClipboardList,
   TestTube,
   ThumbsUp,
+  ThumbsDown,
+  BadgeCheck,
 } from "lucide-react";
 import ITHelpdeskService from "../../services/helpdesk/HelpdeskService";
 import HelpdeskService from "../../services/helpdesk/HelpdeskService";
@@ -87,6 +77,7 @@ const CATEGORY_META = {
       "Open",
       "Requirement",
       "Discussion",
+      "Acceptance",
       "In Progress",
       "IT Testing",
       "Ready for Demo",
@@ -105,6 +96,7 @@ const CATEGORY_META = {
       "Open",
       "Requirement",
       "Discussion",
+      "Acceptance",
       "In Progress",
       "IT Testing",
       "Ready for Demo",
@@ -121,6 +113,7 @@ const CATEGORY_META = {
     pill: "bg-amber-50 text-amber-700 border-amber-200",
     statuses: [
       "Open",
+      "Acceptance",
       "In Progress",
       "Waiting for User Input",
       "Resolved",
@@ -134,6 +127,7 @@ const CATEGORY_META = {
     pill: "bg-orange-50 text-orange-700 border-orange-200",
     statuses: [
       "Open",
+      "Acceptance",
       "In Progress",
       "Waiting for User Input",
       "Resolved",
@@ -143,14 +137,17 @@ const CATEGORY_META = {
   },
 };
 
+// HR statuses — Acceptance after Assigned, then In Progress
 const HR_STATUSES = [
   "Open",
   "Queue",
   "Assigned",
+  "Acceptance",
   "In Progress",
   "Resolved",
   "Closed",
 ];
+
 const FULL_FLOW_CATEGORIES = ["software", "erp"];
 const TESTING_STATUSES = ["IT Testing", "Ready for Demo", "User Testing"];
 
@@ -184,6 +181,12 @@ const STATUS_META = {
     txt: "text-blue-700",
     chip: "bg-blue-100 text-blue-700",
     Icon: UserCheck,
+  },
+  Acceptance: {
+    dot: "bg-sky-500",
+    txt: "text-sky-700",
+    chip: "bg-sky-100 text-sky-700",
+    Icon: BadgeCheck,
   },
   "In Progress": {
     dot: "bg-blue-500",
@@ -378,6 +381,10 @@ function mapApiTicket(t) {
     catParsed.catalogParent,
     catParsed.catalogCategory,
   );
+
+  // Normalize API status "Enrolled" → "Assigned" for consistent UI binding
+  const rawStatus = t.status === "Enrolled" ? "Assigned" : t.status || "Open";
+
   return {
     id: t.ticket_Id,
     ticketNo: t.ticket_No || "",
@@ -394,7 +401,7 @@ function mapApiTicket(t) {
     ticketType: t.req_Type || null,
     requestType: t.req_Type || null,
     impact: t.impact || "user",
-    status: t.status || "Open",
+    status: rawStatus,
     submittedDate: t.submitted_At ? t.submitted_At.slice(0, 10) : todayISO(),
     itStartDate: t.start_Date ? t.start_Date.slice(0, 10) : null,
     etaDate: t.eta_Date ? t.eta_Date.slice(0, 10) : null,
@@ -411,6 +418,7 @@ function mapApiTicket(t) {
     linkedTaskIds: [],
     enrolledByIT: t.status !== "Open",
     itAssignees: parseAssignees(t.assigned_Person_Name || ""),
+    // ── Store all assignee IDs as strings for reliable ID-based matching ──
     itAssigneeIds: parseAssignees(String(t.assigned_Person || "")),
     itRemarks: t.remarks || "",
     org: t.org_Id || t.org || "IML",
@@ -420,6 +428,7 @@ function mapApiTicket(t) {
     autoClosedAfterStrikes: false,
     resolvedNote: "",
     userConfirmedResolved: false,
+    acceptanceNote: "",
   };
 }
 
@@ -532,7 +541,6 @@ function NestedCatalogDropdown({
 
   return (
     <div className="space-y-2">
-      {/* Level 1 */}
       <div ref={catRef} className="relative">
         <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
           Category
@@ -578,7 +586,6 @@ function NestedCatalogDropdown({
         )}
       </div>
 
-      {/* Level 2 */}
       {value.parentName && !isRootMode && allCategories.length > 0 && (
         <div ref={subRef} className="relative">
           <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
@@ -644,7 +651,6 @@ function NestedCatalogDropdown({
         </div>
       )}
 
-      {/* Level 3 */}
       {(value.categoryName || (isRootMode && value.parentName)) &&
         allSubCats.length > 0 && (
           <div ref={itemRef} className="relative">
@@ -702,7 +708,6 @@ function NestedCatalogDropdown({
           </div>
         )}
 
-      {/* Breadcrumb */}
       {value.parentName && (
         <div className="flex items-center gap-1 flex-wrap pt-1">
           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
@@ -738,7 +743,7 @@ function NestedCatalogDropdown({
   );
 }
 
-// ─── ASSIGNEE DROPDOWN — SINGLE SELECT (Change 8) ────────────────────────────
+// ─── ASSIGNEE DROPDOWN — SINGLE SELECT ───────────────────────────────────────
 function AssigneeDropdown({
   value,
   onChange,
@@ -756,9 +761,6 @@ function AssigneeDropdown({
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // value is now a single employee object or null
-  const selectedName = value ? value.emp_Name : "";
-
   return (
     <Field label={label} error={error}>
       <div ref={ref} className="relative">
@@ -772,7 +774,7 @@ function AssigneeDropdown({
               !value ? "text-slate-400" : "text-slate-800 font-semibold"
             }
           >
-            {!value ? "Select engineer…" : selectedName}
+            {!value ? "Select engineer…" : value.emp_Name}
           </span>
           <ChevronDown
             className={`w-4 h-4 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
@@ -917,13 +919,12 @@ const safeSheetName = (name, fallback = "Sheet") => {
   return cleaned || fallback;
 };
 
-// ─── EXCEL DOWNLOAD — Change 10: Status+Priority first, single detail sheet, frozen header ──
+// ─── EXCEL DOWNLOAD ───────────────────────────────────────────────────────────
 function buildOngoingSheets(tickets, dept) {
   const deptTickets = tickets.filter(
     (t) => t.ticketDept === dept && t.status !== "Closed",
   );
 
-  // Status & Priority at start (Change 10)
   const columns = [
     "Status",
     "Priority",
@@ -971,8 +972,6 @@ function buildOngoingSheets(tickets, dept) {
   ];
 
   const wb = XLSX.utils.book_new();
-
-  // Summary page (Change 10: merged into one workbook with summary + detail)
   const summaryData = [
     ["Helpdesk Ongoing Tickets Report"],
     ["Department", dept],
@@ -987,6 +986,7 @@ function buildOngoingSheets(tickets, dept) {
           "Requirement",
           "Discussion",
           "Assigned",
+          "Acceptance",
           "In Progress",
           "IT Testing",
           "Ready for Demo",
@@ -1005,26 +1005,18 @@ function buildOngoingSheets(tickets, dept) {
     [],
     ["Total Active", deptTickets.length],
   ];
-
   const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
   summaryWs["!cols"] = [{ wch: 28 }, { wch: 12 }];
   XLSX.utils.book_append_sheet(wb, summaryWs, "Summary");
 
-  // Single detail sheet (Change 10: all tickets in one sheet)
   const data = [columns, ...deptTickets.map(toRow)];
   const ws = XLSX.utils.aoa_to_sheet(data);
-
-  // Freeze header row (Change 10)
   ws["!freeze"] = { xSplit: 0, ySplit: 1 };
-
-  const colWidths = [
+  ws["!cols"] = [
     12, 10, 12, 8, 10, 40, 15, 20, 20, 20, 14, 20, 10, 14, 14, 12, 10, 25, 30,
     20,
-  ];
-  ws["!cols"] = columns.map((_, i) => ({ wch: colWidths[i] || 15 }));
-
+  ].map((w) => ({ wch: w }));
   XLSX.utils.book_append_sheet(wb, ws, safeSheetName("All Ongoing Tickets"));
-
   return wb;
 }
 
@@ -1034,8 +1026,6 @@ function buildClosedSheet(tickets, dept, from, to) {
     const d = t.submittedDate || "";
     return d >= from && d <= to;
   });
-
-  // Status & Priority at start (Change 10)
   const columns = [
     "Status",
     "Priority",
@@ -1062,7 +1052,6 @@ function buildClosedSheet(tickets, dept, from, to) {
     "Days to Close",
     "Auto Closed",
   ];
-
   const toRow = (t) => {
     const daysToClose =
       t.submittedDate && t.closingDate
@@ -1097,10 +1086,7 @@ function buildClosedSheet(tickets, dept, from, to) {
       t.autoClosedAfterStrikes ? "Yes" : "No",
     ];
   };
-
   const wb = XLSX.utils.book_new();
-
-  // Summary
   const summaryData = [
     ["Helpdesk Closed Tickets Report"],
     [`Department: ${dept}`],
@@ -1125,21 +1111,14 @@ function buildClosedSheet(tickets, dept, from, to) {
   const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
   summaryWs["!cols"] = [{ wch: 28 }, { wch: 14 }];
   XLSX.utils.book_append_sheet(wb, summaryWs, "Summary");
-
-  // Single detail sheet (Change 10)
   const data = [columns, ...deptTickets.map(toRow)];
   const ws = XLSX.utils.aoa_to_sheet(data);
-
-  // Freeze header row (Change 10)
   ws["!freeze"] = { xSplit: 0, ySplit: 1 };
-
-  const colWidths = [
+  ws["!cols"] = [
     10, 10, 12, 8, 10, 40, 15, 20, 20, 20, 14, 20, 10, 14, 14, 12, 10, 14, 35,
     25, 30, 20, 12, 10,
-  ];
-  ws["!cols"] = columns.map((_, i) => ({ wch: colWidths[i] || 15 }));
+  ].map((w) => ({ wch: w }));
   XLSX.utils.book_append_sheet(wb, ws, "Closed Tickets");
-
   return wb;
 }
 
@@ -1197,7 +1176,6 @@ function ExcelDownloadModal({ onClose, tickets, dept }) {
             <X className="w-4 h-4" />
           </button>
         </div>
-
         <div className="grid grid-cols-2 gap-3 mb-4">
           {[
             {
@@ -1237,7 +1215,6 @@ function ExcelDownloadModal({ onClose, tickets, dept }) {
             </button>
           ))}
         </div>
-
         {mode === "closed" && (
           <div className="space-y-3 mb-4 p-3 rounded-xl border border-slate-200 bg-slate-50">
             <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500">
@@ -1264,24 +1241,9 @@ function ExcelDownloadModal({ onClose, tickets, dept }) {
             </div>
           </div>
         )}
-
-        {mode === "ongoing" && (
-          <div className="mb-4 p-3 rounded-xl border border-blue-100 bg-blue-50/50 text-xs text-blue-700">
-            <p className="font-bold mb-1">Includes 2 sheets:</p>
-            <p>
-              📋 <b>Summary</b> — Status breakdown counts
-            </p>
-            <p>
-              📊 <b>All Ongoing Tickets</b> — Full detail with frozen header,
-              Status &amp; Priority columns first
-            </p>
-          </div>
-        )}
-
         {error && (
           <p className="mb-3 text-xs text-red-600 font-semibold">{error}</p>
         )}
-
         <div className="flex gap-2">
           <button
             onClick={onClose}
@@ -1303,10 +1265,10 @@ function ExcelDownloadModal({ onClose, tickets, dept }) {
   );
 }
 
-// ─── REQUEST TYPE SELECTOR (Card-style, used in both Create and Enroll — Change 6) ──
-function RequestTypeSelector({ value, onChange, compact = false }) {
+// ─── REQUEST TYPE SELECTOR ────────────────────────────────────────────────────
+function RequestTypeSelector({ value, onChange }) {
   return (
-    <div className={`grid grid-cols-2 gap-2 ${compact ? "" : ""}`}>
+    <div className="grid grid-cols-2 gap-2">
       {[
         {
           value: "Service Request",
@@ -1366,14 +1328,13 @@ function RequestTypeSelector({ value, onChange, compact = false }) {
   );
 }
 
-// ─── PRIORITY SELECTOR (Change 2) — inline detail shown on select ─────────────
+// ─── PRIORITY SELECTOR ────────────────────────────────────────────────────────
 function PrioritySelector({ value, onChange, error }) {
   return (
     <Field label="Priority" error={error}>
       <div className="flex gap-2">
         {PRIORITIES.map((p) => {
           const isSel = value === p;
-          const detail = PRIORITY_DETAILS[p];
           const cfg = {
             Critical: {
               base: "border-red-200 bg-red-50/60 hover:bg-red-50",
@@ -1404,7 +1365,7 @@ function PrioritySelector({ value, onChange, error }) {
               <p className={`text-xs font-bold ${cfg.txt}`}>{p}</p>
               {isSel && (
                 <p className={`text-[10px] mt-0.5 leading-tight ${cfg.detail}`}>
-                  {detail}
+                  {PRIORITY_DETAILS[p]}
                 </p>
               )}
             </button>
@@ -1415,7 +1376,7 @@ function PrioritySelector({ value, onChange, error }) {
   );
 }
 
-// ─── CREATE IT MODAL — Changes 1, 2 (reordered fields, priority added) ────────
+// ─── CREATE IT MODAL ──────────────────────────────────────────────────────────
 function CreateITModal({
   catalogTree,
   catalogLoading,
@@ -1443,6 +1404,14 @@ function CreateITModal({
         : catalogTree.itService || [],
     [form.requestType, catalogTree],
   );
+
+  const handleRequestTypeChange = (v) => {
+    setForm((p) => ({
+      ...p,
+      requestType: v,
+      catalogValue: { parentName: "", categoryName: "", subCategory: "" },
+    }));
+  };
 
   const validate = () => {
     const errs = {};
@@ -1505,30 +1474,16 @@ function CreateITModal({
             <X className="w-4 h-4" />
           </button>
         </div>
-
         <div className="overflow-y-auto thin-scroll flex-1 p-6 space-y-5">
-          {/* 1. Request Type */}
           <div>
             <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2">
               Request Type
             </label>
             <RequestTypeSelector
               value={form.requestType}
-              onChange={(v) =>
-                setForm((p) => ({
-                  ...p,
-                  requestType: v,
-                  catalogValue: {
-                    parentName: "",
-                    categoryName: "",
-                    subCategory: "",
-                  },
-                }))
-              }
+              onChange={handleRequestTypeChange}
             />
           </div>
-
-          {/* 2. Category */}
           <div>
             <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2">
               Select Category
@@ -1547,8 +1502,6 @@ function CreateITModal({
               </p>
             )}
           </div>
-
-          {/* 3. Description — immediately after category (Change 1) */}
           <Field
             label="Description / Request Details"
             error={errors.description}
@@ -1563,18 +1516,31 @@ function CreateITModal({
               className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:outline-none focus:border-slate-400 resize-none"
             />
           </Field>
-
-          {/* 4. Priority (Change 2) — with detail shown on select */}
           <PrioritySelector
             value={form.priority}
             onChange={(v) => setForm((p) => ({ ...p, priority: v }))}
             error={errors.priority}
           />
-
-          {/* 5. Ticket Type — before attachment (Change 1) */}
-          {/* Already covered by Request Type above; ticket type is the same */}
-
-          {/* 6. Attachment */}
+          <Field label="Ticket Type">
+            <div className="grid grid-cols-2 gap-2">
+              {["Ticket", "Linked Ticket"].map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() =>
+                    setForm((p) => ({
+                      ...p,
+                      type,
+                      parentId: type === "Linked Ticket" ? p.parentId : "",
+                    }))
+                  }
+                  className={`h-10 rounded-xl border text-sm font-bold transition-colors ${form.type === type ? "bg-slate-900 text-white border-slate-900" : "border-slate-300 text-slate-600 hover:bg-slate-50"}`}
+                >
+                  {type}
+                </button>
+              ))}
+            </div>
+          </Field>
           <Field label="Attachment (optional)">
             <div
               onClick={() => fileRef.current?.click()}
@@ -1626,7 +1592,6 @@ function CreateITModal({
             />
           </Field>
         </div>
-
         <div className="flex-none border-t border-slate-100 px-6 py-4 flex items-center justify-between gap-3">
           <p className="text-xs text-slate-400">
             Submitted as{" "}
@@ -1660,7 +1625,7 @@ function CreateITModal({
   );
 }
 
-// ─── CREATE HR MODAL — Changes 1, 2 (reordered fields, priority added) ────────
+// ─── CREATE HR MODAL ──────────────────────────────────────────────────────────
 function CreateHRModal({
   catalogTree,
   catalogLoading,
@@ -1737,9 +1702,7 @@ function CreateHRModal({
             <X className="w-4 h-4" />
           </button>
         </div>
-
         <div className="overflow-y-auto thin-scroll flex-1 p-6 space-y-5">
-          {/* 1. Category */}
           <div>
             <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2">
               Select HR Category
@@ -1759,8 +1722,6 @@ function CreateHRModal({
               </p>
             )}
           </div>
-
-          {/* 2. Description — immediately after category (Change 1) */}
           <Field
             label="Description / Request Details"
             error={errors.description}
@@ -1775,15 +1736,11 @@ function CreateHRModal({
               className="w-full rounded-xl border border-indigo-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-400 resize-none"
             />
           </Field>
-
-          {/* 3. Priority (Change 2) */}
           <PrioritySelector
             value={form.priority}
             onChange={(v) => setForm((p) => ({ ...p, priority: v }))}
             error={errors.priority}
           />
-
-          {/* 4. Attachment */}
           <Field label="Attachment (optional)">
             <div
               onClick={() => fileRef.current?.click()}
@@ -1835,7 +1792,6 @@ function CreateHRModal({
             />
           </Field>
         </div>
-
         <div className="flex-none border-t border-indigo-100 px-6 py-4 flex items-center justify-between gap-3 bg-indigo-50/30">
           <p className="text-xs text-indigo-400">
             Submitted as{" "}
@@ -1881,8 +1837,9 @@ function TicketCard({ ticket, active, onClick, currentUser }) {
     !groups[groups.length - 1].every((s) => s.response_Received)
       ? groups[groups.length - 1]
       : null;
+  // ── ID-based assignment check ──────────────────────────────────────────────
   const isAssigned =
-    currentUser && ticket.itAssignees?.includes(currentUser.emp_Name);
+    currentUser && ticket.itAssigneeIds?.includes(String(currentUser.emp_Id));
 
   return (
     <button
@@ -2011,6 +1968,7 @@ function UserDashboard({
         "In Progress",
         "Requirement",
         "Discussion",
+        "Acceptance",
         "IT Testing",
         "Ready for Demo",
         "User Testing",
@@ -2031,7 +1989,6 @@ function UserDashboard({
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
-      {/* Mobile-responsive header (Change 4) */}
       <header className="flex-none border-b border-slate-200 bg-white shadow-sm">
         <div className="mx-auto max-w-5xl px-4 sm:px-5 py-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -2054,7 +2011,6 @@ function UserDashboard({
               </div>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              {/* Change 3: Name shortener with teal bg; IT ticket button with slate-700 (different from name box) */}
               <div className="flex items-center gap-2 rounded-xl px-3 py-2 border border-teal-200 bg-teal-50">
                 <div className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black bg-teal-500 text-white">
                   {currentUser.emp_Name
@@ -2069,25 +2025,24 @@ function UserDashboard({
                     {currentUser.emp_Name}
                   </p>
                   <p className="text-[10px] font-semibold text-teal-600">
-                    {currentUser.emp_No}
+                    #{currentUser.emp_No}
                   </p>
                 </div>
               </div>
-              {/* Change 3: IT ticket button — sky blue to differentiate from name box */}
               <button
                 onClick={onCreateITTicket}
                 className="inline-flex h-9 items-center gap-1.5 rounded-xl px-3 sm:px-4 text-xs sm:text-sm font-bold text-white bg-sky-600 hover:bg-sky-700 transition-colors"
               >
                 <Wrench className="h-3.5 w-3.5" />
-                <span className="hidden xs:inline">IT </span>Ticket
+                <span className="hidden sm:inline">IT </span>Ticket
               </button>
-              <button
+              {/* <button
                 onClick={onCreateHRTicket}
                 className="inline-flex h-9 items-center gap-1.5 rounded-xl px-3 sm:px-4 text-xs sm:text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
               >
                 <Briefcase className="h-3.5 w-3.5" />
-                <span className="hidden xs:inline">HR </span>Ticket
-              </button>
+                <span className="hidden sm:inline">HR </span>Ticket
+              </button> */}
               <button
                 onClick={onLogout}
                 className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-300 px-3 text-sm font-semibold text-slate-600 hover:bg-slate-50"
@@ -2098,9 +2053,7 @@ function UserDashboard({
           </div>
         </div>
       </header>
-
       <main className="flex-1 p-4 sm:p-6 max-w-5xl mx-auto w-full">
-        {/* Stats — responsive grid (Change 4) */}
         <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 sm:gap-3 mb-5">
           {[
             { l: "Total", v: stats.total, t: "slate" },
@@ -2123,7 +2076,6 @@ function UserDashboard({
             </div>
           ))}
         </div>
-
         {ticketsLoading ? (
           <div className="flex items-center justify-center py-16 text-slate-400">
             <Loader2 className="w-8 h-8 animate-spin mr-3" />
@@ -2308,6 +2260,7 @@ function TicketModal({
   onWaitingForUserInput,
   onCloseTicket,
   onResolveTicket,
+  onAcceptanceTicket,
   strikeForm,
   setStrikeForm,
   strikeErrors,
@@ -2325,6 +2278,8 @@ function TicketModal({
   onEditPriority,
   detailLoading,
   employees,
+  catalogTree,
+  catalogLoading,
 }) {
   const [tab, setTab] = useState("details");
   const isHRTicket = ticket.ticketDept === "HR";
@@ -2334,6 +2289,7 @@ function TicketModal({
   const badge = etaBadge(ticket.etaDate, ticket.status);
   const isClosed = ticket.status === "Closed";
   const isResolved = ticket.status === "Resolved";
+  const isAcceptance = ticket.status === "Acceptance";
   const isOnHold = ticket.status === "On Hold";
   const isWaiting = ticket.status === "Waiting for User Input";
   const isAssigned = ticket.status === "Assigned";
@@ -2353,15 +2309,38 @@ function TicketModal({
       endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [ticket.messages, tab]);
 
+  const enrollActiveCatalogTree = useMemo(() => {
+    if (isHRTicket) return catalogTree?.hr || [];
+    return enrollForm.ticketType === "Incident"
+      ? catalogTree?.itIncident || []
+      : catalogTree?.itService || [];
+  }, [enrollForm.ticketType, catalogTree, isHRTicket]);
+
+  const handleEnrollRequestTypeChange = (v) => {
+    setEnrollForm((f) => ({
+      ...f,
+      ticketType: v,
+      enrollCatalogValue: { parentName: "", categoryName: "", subCategory: "" },
+    }));
+  };
+
   const nextStatuses =
-    canAct && !isClosed && !isResolved && !isOnHold && !isWaiting
+    canAct &&
+    !isClosed &&
+    !isResolved &&
+    !isAcceptance &&
+    !isOnHold &&
+    !isWaiting &&
+    !isAssigned
       ? catFlow.filter(
           (s, i) =>
             i > curIdx &&
             s !== "Closed" &&
             s !== "Resolved" &&
+            s !== "Acceptance" &&
             s !== "Waiting for User Input" &&
-            s !== "On Hold",
+            s !== "On Hold" &&
+            s !== "Open",
         )
       : [];
 
@@ -2690,7 +2669,7 @@ function TicketModal({
                 </div>
               </Section>
 
-              {/* Enroll — Changes 6, 7, 8 */}
+              {/* ── ENROLL SECTION ─────────────────────────────────────────── */}
               {(isIT || isHR) &&
                 canAct &&
                 !ticket.enrolledByIT &&
@@ -2701,7 +2680,41 @@ function TicketModal({
                     subtitle={`Assign ${isHRTicket ? "HR officer" : "IT engineer"}, set priority and ETA.`}
                   >
                     <div className="mt-4 space-y-3">
-                      {/* Change 6: Request type shown as card-style for IT; Change 7: hidden for HR */}
+                      {(ticket.catalogParent ||
+                        ticket.catalogCategory ||
+                        ticket.catalogSubCategory) && (
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">
+                            Submitted Category
+                          </p>
+                          <div className="flex items-center gap-1 flex-wrap">
+                            {ticket.catalogParent && (
+                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">
+                                {ticket.catalogParent}
+                              </span>
+                            )}
+                            {ticket.catalogCategory &&
+                              ticket.catalogCategory !==
+                                ticket.catalogParent && (
+                                <>
+                                  <ChevronRight className="w-2.5 h-2.5 text-slate-300" />
+                                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">
+                                    {ticket.catalogCategory}
+                                  </span>
+                                </>
+                              )}
+                            {ticket.catalogSubCategory && (
+                              <>
+                                <ChevronRight className="w-2.5 h-2.5 text-slate-300" />
+                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">
+                                  {ticket.catalogSubCategory}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
                       {!isHRTicket && (
                         <div>
                           <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2">
@@ -2709,9 +2722,7 @@ function TicketModal({
                           </label>
                           <RequestTypeSelector
                             value={enrollForm.ticketType || "Service Request"}
-                            onChange={(v) =>
-                              setEnrollForm((f) => ({ ...f, ticketType: v }))
-                            }
+                            onChange={handleEnrollRequestTypeChange}
                           />
                           {enrollErrors.ticketType && (
                             <p className="mt-1 text-xs text-red-600 font-semibold">
@@ -2721,7 +2732,36 @@ function TicketModal({
                         </div>
                       )}
 
-                      {/* Priority */}
+                      {!isHRTicket && (
+                        <div>
+                          <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+                            Update Category{" "}
+                            <span className="normal-case font-normal text-slate-400">
+                              (optional — change if needed)
+                            </span>
+                          </label>
+                          <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-3">
+                            <NestedCatalogDropdown
+                              tree={enrollActiveCatalogTree}
+                              value={
+                                enrollForm.enrollCatalogValue || {
+                                  parentName: "",
+                                  categoryName: "",
+                                  subCategory: "",
+                                }
+                              }
+                              onChange={(v) =>
+                                setEnrollForm((f) => ({
+                                  ...f,
+                                  enrollCatalogValue: v,
+                                }))
+                              }
+                              loading={catalogLoading}
+                            />
+                          </div>
+                        </div>
+                      )}
+
                       <PrioritySelector
                         value={enrollForm.priority}
                         onChange={(v) =>
@@ -2730,7 +2770,6 @@ function TicketModal({
                         error={enrollErrors.priority}
                       />
 
-                      {/* Change 8: Single assignee */}
                       <AssigneeDropdown
                         value={enrollForm.assignee || null}
                         onChange={(v) =>
@@ -2760,7 +2799,6 @@ function TicketModal({
                             className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm focus:outline-none focus:border-slate-400"
                           />
                         </Field>
-                        {/* For HR tickets show ETA date only (no incident hours) */}
                         {!isHRTicket && enrollForm.ticketType === "Incident" ? (
                           <Field
                             label="Expected Hours"
@@ -2797,6 +2835,7 @@ function TicketModal({
                           </Field>
                         )}
                       </div>
+
                       <Field label="Remarks (optional)">
                         <textarea
                           rows={2}
@@ -2811,6 +2850,7 @@ function TicketModal({
                           className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:outline-none focus:border-slate-400 resize-none"
                         />
                       </Field>
+
                       <button
                         onClick={onEnroll}
                         disabled={enrollLoading}
@@ -2827,7 +2867,6 @@ function TicketModal({
                   </Section>
                 )}
 
-              {/* Enrollment details */}
               {ticket.enrolledByIT && (
                 <Section title="Enrollment Details">
                   <div className="mt-3 grid grid-cols-3 gap-2">
@@ -2900,23 +2939,111 @@ function TicketModal({
 
               {canAct && ticket.enrolledByIT && isAssigned && !isClosed && (
                 <Section
-                  title="Start Work"
-                  subtitle="Move to In Progress when you begin working."
+                  title="Accept Ticket"
+                  subtitle="Review the ticket details and confirm acceptance before starting work."
                   accent="amber"
                 >
-                  <div className="mt-3">
+                  <div className="mt-3 space-y-2">
+                    <div className="rounded-xl border border-sky-100 bg-sky-50/50 px-3 py-2.5 text-xs text-sky-700">
+                      <span className="font-bold">What is Acceptance?</span>{" "}
+                      Moving to Acceptance confirms you have reviewed and
+                      acknowledged the ticket. After acceptance you can move it
+                      to In Progress.
+                    </div>
                     <button
-                      onClick={() => onMoveStatus("In Progress")}
-                      className="w-full h-11 rounded-xl bg-blue-600 text-sm font-bold text-white hover:bg-blue-700 flex items-center justify-center gap-2"
+                      onClick={onAcceptanceTicket}
+                      className="w-full h-11 rounded-xl bg-sky-600 text-sm font-bold text-white hover:bg-sky-700 flex items-center justify-center gap-2"
                     >
-                      <Clock3 className="w-4 h-4" />
-                      Move to In Progress
+                      <BadgeCheck className="w-4 h-4" />
+                      Accept Ticket
                     </button>
+                    <div className="flex gap-2 flex-wrap">
+                      <button
+                        onClick={onResolveTicket}
+                        className="flex items-center gap-2 h-9 px-4 rounded-xl bg-emerald-100 text-emerald-800 border border-emerald-200 text-sm font-semibold hover:bg-emerald-200"
+                      >
+                        <ThumbsUp className="w-4 h-4" />
+                        Mark Resolved
+                      </button>
+                      <button
+                        onClick={onCloseTicket}
+                        className="flex items-center gap-2 h-9 px-4 rounded-xl bg-slate-800 text-white text-sm font-semibold hover:bg-slate-900"
+                      >
+                        <XCircle className="w-4 h-4" />
+                        Close Ticket
+                      </button>
+                      {ticket.itAssignees?.length > 0 && (
+                        <button
+                          onClick={onReassign}
+                          className="flex items-center gap-2 h-9 px-4 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 text-sm font-semibold hover:bg-blue-100"
+                        >
+                          <RefreshCw className="w-4 h-4" />
+                          Reassign
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </Section>
               )}
 
-              {/* Three-strike */}
+              {isAcceptance && (
+                <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
+                  <div className="flex items-start gap-3 mb-3">
+                    <BadgeCheck className="w-5 h-5 text-sky-600 flex-none mt-0.5" />
+                    <div>
+                      <p className="text-sm font-bold text-sky-800">
+                        Ticket Accepted — Ready to Start
+                      </p>
+                      <p className="text-xs text-sky-600 mt-0.5">
+                        Ticket has been accepted. Move to In Progress to begin
+                        work.
+                      </p>
+                      {ticket.acceptanceNote && (
+                        <div className="mt-2 rounded-xl bg-white/70 border border-sky-100 px-3 py-2">
+                          <p className="text-sm text-slate-700">
+                            {ticket.acceptanceNote}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {canAct && (
+                    <div className="flex gap-2 flex-wrap">
+                      <button
+                        onClick={() => onMoveStatus("In Progress")}
+                        className="flex items-center gap-2 h-9 px-4 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700"
+                      >
+                        <Clock3 className="w-4 h-4" />
+                        Start — Move to In Progress
+                      </button>
+                      <button
+                        onClick={onResolveTicket}
+                        className="flex items-center gap-2 h-9 px-4 rounded-xl bg-emerald-100 text-emerald-800 border border-emerald-200 text-sm font-semibold hover:bg-emerald-200"
+                      >
+                        <ThumbsUp className="w-4 h-4" />
+                        Mark Resolved
+                      </button>
+                      <button
+                        onClick={onCloseTicket}
+                        className="flex items-center gap-2 h-9 px-4 rounded-xl bg-slate-800 text-white text-sm font-semibold hover:bg-slate-900"
+                      >
+                        <XCircle className="w-4 h-4" />
+                        Close Ticket
+                      </button>
+                      {ticket.itAssignees?.length > 0 && (
+                        <button
+                          onClick={onReassign}
+                          className="flex items-center gap-2 h-9 px-4 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 text-sm font-semibold hover:bg-blue-100"
+                        >
+                          <RefreshCw className="w-4 h-4" />
+                          Reassign
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {canAct && isWaiting && isFullFlowIT && (
                 <Section
                   title="Three-Strike Follow-up"
@@ -3060,14 +3187,6 @@ function TicketModal({
                                 </button>
                               </div>
                             )}
-                          {strike &&
-                            !strike.response_Received &&
-                            !isLastSentStrike && (
-                              <div className="mt-2 rounded-lg bg-slate-50 border border-slate-100 px-3 py-2 text-xs text-slate-400 italic">
-                                Response window closed — Strike {num + 1} was
-                                sent without receiving a reply.
-                              </div>
-                            )}
                           {isNext && canSendNext && (
                             <div className="space-y-2">
                               <Field
@@ -3151,11 +3270,11 @@ function TicketModal({
                 </Section>
               )}
 
-              {/* Advance Stage */}
               {canAct &&
                 ticket.enrolledByIT &&
                 !isClosed &&
                 !isResolved &&
+                !isAcceptance &&
                 !isOnHold &&
                 !isWaiting &&
                 !isAssigned &&
@@ -3180,11 +3299,11 @@ function TicketModal({
                   </Section>
                 )}
 
-              {/* Quick actions */}
               {canAct &&
                 ticket.enrolledByIT &&
                 !isClosed &&
                 !isResolved &&
+                !isAcceptance &&
                 !isAssigned && (
                   <Section
                     title={isOnHold || isWaiting ? "Actions" : "Quick Actions"}
@@ -3217,7 +3336,6 @@ function TicketModal({
                           Resume to In Progress
                         </button>
                       )}
-                      {/* Change 9: Resolve action — appears before Close */}
                       {!isOnHold && !isWaiting && (
                         <button
                           onClick={onResolveTicket}
@@ -3247,39 +3365,6 @@ function TicketModal({
                   </Section>
                 )}
 
-              {canAct &&
-                ticket.enrolledByIT &&
-                !isClosed &&
-                !isResolved &&
-                isAssigned && (
-                  <div className="flex gap-2 mt-1 flex-wrap">
-                    <button
-                      onClick={onResolveTicket}
-                      className="flex items-center gap-2 h-9 px-4 rounded-xl bg-emerald-100 text-emerald-800 border border-emerald-200 text-sm font-semibold hover:bg-emerald-200"
-                    >
-                      <ThumbsUp className="w-4 h-4" />
-                      Mark Resolved
-                    </button>
-                    <button
-                      onClick={onCloseTicket}
-                      className="flex items-center gap-2 h-9 px-4 rounded-xl bg-slate-800 text-white text-sm font-semibold hover:bg-slate-900"
-                    >
-                      <XCircle className="w-4 h-4" />
-                      Close Ticket
-                    </button>
-                    {ticket.itAssignees?.length > 0 && (
-                      <button
-                        onClick={onReassign}
-                        className="flex items-center gap-2 h-9 px-4 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 text-sm font-semibold hover:bg-blue-100"
-                      >
-                        <RefreshCw className="w-4 h-4" />
-                        Reassign
-                      </button>
-                    )}
-                  </div>
-                )}
-
-              {/* Change 9: Resolved state — waiting for user green flag */}
               {isResolved && !isClosed && (
                 <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4">
                   <div className="flex items-start gap-3">
@@ -3289,8 +3374,7 @@ function TicketModal({
                         Marked as Resolved
                       </p>
                       <p className="text-xs text-emerald-600 mt-0.5">
-                        Awaiting user confirmation. Once the user confirms the
-                        issue is resolved, this ticket can be closed.
+                        Awaiting user confirmation.
                       </p>
                       {ticket.resolvedNote && (
                         <div className="mt-2 rounded-xl bg-white/70 border border-emerald-100 px-3 py-2.5">
@@ -3315,19 +3399,7 @@ function TicketModal({
                         className="flex items-center gap-2 h-9 px-4 rounded-xl bg-white border border-emerald-300 text-emerald-800 text-sm font-semibold hover:bg-emerald-50"
                       >
                         <Clock3 className="w-4 h-4" />
-                        Re-open (needs more work)
-                      </button>
-                    </div>
-                  )}
-                  {/* User (non-IT/HR) can confirm resolution */}
-                  {!canAct && !isIT && !isHR && (
-                    <div className="mt-3 flex gap-2 flex-wrap">
-                      <button
-                        onClick={onCloseTicket}
-                        className="flex items-center gap-2 h-9 px-4 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700"
-                      >
-                        <CheckCircle2 className="w-4 h-4" />
-                        Confirm Resolved — Close Ticket
+                        Re-open
                       </button>
                     </div>
                   )}
@@ -3553,11 +3625,9 @@ export default function HelpdeskPage() {
   const isHR = role === "HR";
   const isDeptUser = role === "User";
 
-  // ── State ──
   const [tickets, setTickets] = useState([]);
   const [ticketsLoading, setTicketsLoading] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
-  // Change 5: Default org filter "All"
   const [orgFilter, setOrgFilter] = useState("All");
   const [catalogRaw, setCatalogRaw] = useState([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
@@ -3574,15 +3644,15 @@ export default function HelpdeskPage() {
   const [ticketStrikes, setTicketStrikes] = useState({});
   const [ticketHistory, setTicketHistory] = useState({});
 
-  // Modal state
   const [enrollForm, setEnrollForm] = useState({
-    assignee: null, // Change 8: single engineer
+    assignee: null,
     itStartDate: todayISO(),
     etaDate: "",
     etaHours: "",
     itRemarks: "",
     priority: "Medium",
     ticketType: "Service Request",
+    enrollCatalogValue: { parentName: "", categoryName: "", subCategory: "" },
   });
   const [enrollErrors, setEnrollErrors] = useState({});
   const [newMsg, setNewMsg] = useState("");
@@ -3594,11 +3664,12 @@ export default function HelpdeskPage() {
   const [closeModal, setCloseModal] = useState(false);
   const [closeNote, setCloseNote] = useState("");
   const [closeError, setCloseError] = useState("");
-  // Change 9: Resolve modal
   const [resolveModal, setResolveModal] = useState(false);
   const [resolveNote, setResolveNote] = useState("");
   const [resolveError, setResolveError] = useState("");
-
+  const [acceptanceModal, setAcceptanceModal] = useState(false);
+  const [acceptanceNote, setAcceptanceNote] = useState("");
+  const [acceptanceError, setAcceptanceError] = useState("");
   const [strikeForm, setStrikeForm] = useState({ mailId: "", note: "" });
   const [strikeErrors, setStrikeErrors] = useState({});
   const [responseForm, setResponseForm] = useState({});
@@ -3608,13 +3679,12 @@ export default function HelpdeskPage() {
     remarks: "",
   });
   const [reassignModal, setReassignModal] = useState(false);
-  const [reassignee, setReassignee] = useState(null); // Change 8: single
+  const [reassignee, setReassignee] = useState(null);
   const [editTypeModal, setEditTypeModal] = useState(false);
   const [editPriorityModal, setEditPriorityModal] = useState(false);
 
   const catalogTree = useMemo(() => parseCatalog(catalogRaw), [catalogRaw]);
 
-  // ── Fetch tickets ──
   const fetchTickets = useCallback(async () => {
     setTicketsLoading(true);
     try {
@@ -3643,7 +3713,6 @@ export default function HelpdeskPage() {
     }
   }, [isIT, isHR, currentUser.emp_Id, orgFilter]);
 
-  // ── Fetch catalog ──
   useEffect(() => {
     const cached = sessionStorage.getItem(CATALOG_CACHE_KEY);
     if (cached) {
@@ -3663,7 +3732,6 @@ export default function HelpdeskPage() {
       .finally(() => setCatalogLoading(false));
   }, []);
 
-  // ── Fetch employees ──
   useEffect(() => {
     const dept = isIT ? "IT" : isHR ? "HR" : null;
     if (!dept) return;
@@ -3676,7 +3744,6 @@ export default function HelpdeskPage() {
     fetchTickets();
   }, [fetchTickets]);
 
-  // ── Fetch detail data ──
   useEffect(() => {
     if (!selectedId) return;
     const loadDetail = async () => {
@@ -3714,7 +3781,6 @@ export default function HelpdeskPage() {
     loadDetail();
   }, [selectedId, employees]);
 
-  // Reset forms on ticket change
   useEffect(() => {
     setEnrollForm({
       assignee: null,
@@ -3724,11 +3790,14 @@ export default function HelpdeskPage() {
       itRemarks: "",
       priority: "Medium",
       ticketType: "Service Request",
+      enrollCatalogValue: { parentName: "", categoryName: "", subCategory: "" },
     });
     setEnrollErrors({});
     setHoldModal(false);
     setCloseModal(false);
     setResolveModal(false);
+    setAcceptanceModal(false);
+    setAcceptanceNote("");
     setStrikeForm({ mailId: "", note: "" });
     setStrikeErrors({});
     setResponseForm({});
@@ -3751,17 +3820,18 @@ export default function HelpdeskPage() {
     };
   }, [selectedId, tickets, ticketMessages, ticketStrikes, ticketHistory]);
 
+  // ── Derive current user's string ID once — used everywhere ──────────────────
+  const myEmpId = String(currentUser.emp_Id);
+
+  // ── canActOnTicket: purely ID-based ─────────────────────────────────────────
   const canActOnTicket = useMemo(() => {
     if (!sel || isDeptUser) return false;
-    const myName = currentUser.emp_Name;
-    const myId = String(currentUser.emp_Id);
-    const isMyTicket =
-      sel.itAssignees?.includes(myName) || sel.itAssigneeIds?.includes(myId);
+    const isMyTicket = sel.itAssigneeIds?.includes(myEmpId);
     const isOpen = sel.status === "Open";
     if (isIT && sel.ticketDept === "IT") return isOpen || isMyTicket;
     if (isHR && sel.ticketDept === "HR") return isOpen || isMyTicket;
     return false;
-  }, [sel, isIT, isHR, isDeptUser, currentUser]);
+  }, [sel, isIT, isHR, isDeptUser, myEmpId]);
 
   const patchLocal = useCallback((id, data) => {
     setTickets((prev) =>
@@ -3769,7 +3839,6 @@ export default function HelpdeskPage() {
     );
   }, []);
 
-  // ── Create ticket ──
   const createTicket = async (fields) => {
     setSubmitting(true);
     try {
@@ -3798,7 +3867,6 @@ export default function HelpdeskPage() {
     }
   };
 
-  // ── Enroll — Change 8: single assignee ──
   const enrollTicket = async () => {
     const errs = {};
     if (!enrollForm.assignee) errs.assignee = "Please select an assignee.";
@@ -3816,6 +3884,16 @@ export default function HelpdeskPage() {
 
     setEnrollLoading(true);
     try {
+      const catValue = enrollForm.enrollCatalogValue;
+      const hasCatalogChange = catValue?.parentName;
+      const updatedCategoryStr = hasCatalogChange
+        ? buildCategoryStr(
+            catValue.parentName,
+            catValue.categoryName,
+            catValue.subCategory,
+          )
+        : null;
+
       await ITHelpdeskService.enrollTicket({
         ticket_Id: sel.id,
         priority: enrollForm.priority,
@@ -3825,7 +3903,20 @@ export default function HelpdeskPage() {
         eta_Time: enrollForm.etaHours || "",
         remarks: enrollForm.itRemarks.trim(),
         updated_By: currentUser.emp_Id,
+        ...(updatedCategoryStr ? { category: updatedCategoryStr } : {}),
       });
+      try {
+        await ITHelpdeskService.updateHistory({
+          ticket_Id: sel.id,
+          action_Type: "ENROLLED",
+          old_Value: "Open",
+          new_Value: "Assigned",
+          remarks: `Enrolled and assigned to ${enrollForm.assignee.emp_Name}${enrollForm.itRemarks.trim() ? " — " + enrollForm.itRemarks.trim() : ""}`,
+          action_By: currentUser.emp_Id,
+        });
+      } catch (histErr) {
+        console.warn("History log after enroll failed:", histErr);
+      }
       await fetchTickets();
       setSelectedId(null);
     } catch (e) {
@@ -3835,8 +3926,11 @@ export default function HelpdeskPage() {
     }
   };
 
-  // ── Move status ──
   const moveStatus = async (ns, remarks = "") => {
+    if (ns === "Open") {
+      console.warn("Attempted to move back to Open — blocked.");
+      return;
+    }
     try {
       await ITHelpdeskService.updateTicketStatus({
         ticket_Id: sel.id,
@@ -3852,7 +3946,6 @@ export default function HelpdeskPage() {
     }
   };
 
-  // ── Hold ──
   const submitHold = async () => {
     if (!holdReasonType) {
       setHoldError("Please select a reason type.");
@@ -3905,7 +3998,40 @@ export default function HelpdeskPage() {
     }
   };
 
-  // ── Resolve (Change 9) ──
+  const submitAcceptance = async () => {
+    setAcceptanceError("");
+    try {
+      await ITHelpdeskService.updateTicketStatus({
+        ticket_Id: sel.id,
+        status: "Acceptance",
+        remarks: acceptanceNote.trim() || "Ticket accepted",
+        updated_By: currentUser.emp_Id,
+      });
+      try {
+        await ITHelpdeskService.updateHistory({
+          ticket_Id: sel.id,
+          action_Type: "STATUS_CHANGED",
+          old_Value: sel.status,
+          new_Value: "Acceptance",
+          remarks: acceptanceNote.trim() || "Ticket accepted",
+          action_By: currentUser.emp_Id,
+        });
+      } catch (histErr) {
+        console.warn("History log after acceptance failed:", histErr);
+      }
+      patchLocal(sel.id, {
+        status: "Acceptance",
+        acceptanceNote: acceptanceNote.trim(),
+      });
+      setAcceptanceModal(false);
+      setAcceptanceNote("");
+      setSelectedId(null);
+      await fetchTickets();
+    } catch (e) {
+      console.error("Acceptance error:", e);
+    }
+  };
+
   const submitResolve = async () => {
     if (!resolveNote.trim()) {
       setResolveError("Resolution note is required.");
@@ -3919,6 +4045,18 @@ export default function HelpdeskPage() {
         remarks: resolveNote.trim(),
         updated_By: currentUser.emp_Id,
       });
+      try {
+        await ITHelpdeskService.updateHistory({
+          ticket_Id: sel.id,
+          action_Type: "STATUS_CHANGED",
+          old_Value: sel.status,
+          new_Value: "Resolved",
+          remarks: resolveNote.trim(),
+          action_By: currentUser.emp_Id,
+        });
+      } catch (histErr) {
+        console.warn("History log after resolve failed:", histErr);
+      }
       patchLocal(sel.id, {
         status: "Resolved",
         resolvedNote: resolveNote.trim(),
@@ -3932,7 +4070,6 @@ export default function HelpdeskPage() {
     }
   };
 
-  // ── Close ──
   const submitClose = async () => {
     if (!closeNote.trim()) {
       setCloseError("Closing remarks are required.");
@@ -3960,7 +4097,6 @@ export default function HelpdeskPage() {
     }
   };
 
-  // ── Strike ──
   const sendStrike = async () => {
     const errs = {};
     if (!strikeForm.mailId.trim()) errs.mailId = "Mail ID required.";
@@ -3990,7 +4126,6 @@ export default function HelpdeskPage() {
     }
   };
 
-  // ── Mark response ──
   const markResponse = async (strikeId) => {
     const note = (responseForm[strikeId]?.note || "").trim();
     if (!note) {
@@ -4013,7 +4148,6 @@ export default function HelpdeskPage() {
     }
   };
 
-  // ── Auto close ──
   const autoClose = async () => {
     try {
       await ITHelpdeskService.updateTicketStatus({
@@ -4035,7 +4169,6 @@ export default function HelpdeskPage() {
     }
   };
 
-  // ── Send message ──
   const sendMessage = async () => {
     if (!newMsg.trim()) return;
     setMsgLoading(true);
@@ -4067,7 +4200,6 @@ export default function HelpdeskPage() {
     setStageRemarksModal({ open: false, targetStatus: "", remarks: "" });
   };
 
-  // ── Reassign — Change 8: single ──
   const submitReassign = async () => {
     if (!reassignee) return;
     try {
@@ -4077,6 +4209,18 @@ export default function HelpdeskPage() {
         updated_By: currentUser.emp_Id,
         remarks: "",
       });
+      try {
+        await ITHelpdeskService.updateHistory({
+          ticket_Id: sel.id,
+          action_Type: "REASSIGNED",
+          old_Value: sel.itAssignees?.join(", ") || "",
+          new_Value: reassignee.emp_Name,
+          remarks: `Reassigned to ${reassignee.emp_Name}`,
+          action_By: currentUser.emp_Id,
+        });
+      } catch (histErr) {
+        console.warn("History log after reassign failed:", histErr);
+      }
       patchLocal(sel.id, {
         itAssignees: [reassignee.emp_Name],
         itAssigneeIds: [String(reassignee.emp_Id)],
@@ -4133,12 +4277,11 @@ export default function HelpdeskPage() {
     window.location.href = "/";
   };
 
-  // ── Kanban columns — Change 9: Resolved column added ──
+  // ── Visible tickets ──────────────────────────────────────────────────────────
   const visibleTickets = useMemo(() => {
     let base = tickets;
     if (isIT) base = base.filter((t) => t.ticketDept === "IT");
     if (isHR) base = base.filter((t) => t.ticketDept === "HR");
-    // Change 5: "All" shows all orgs
     if ((isIT || isHR) && orgFilter && orgFilter !== "All")
       base = base.filter((t) => t.org === orgFilter);
     return base;
@@ -4158,56 +4301,69 @@ export default function HelpdeskPage() {
       inProgress: base.filter((t) => t.status === "In Progress").length,
       onHold: base.filter((t) => t.status === "On Hold").length,
       waiting: base.filter((t) => t.status === "Waiting for User Input").length,
+      acceptance: base.filter((t) => t.status === "Acceptance").length,
       resolved: base.filter((t) => t.status === "Resolved").length,
       closed: base.filter((t) => t.status === "Closed").length,
       overdue,
     };
   }, [visibleTickets]);
 
+  // ── Kanban helpers — ID-based assignment check ───────────────────────────────
+  // All "is this ticket mine?" checks use itAssigneeIds + myEmpId exclusively.
+  const isMine = (t) => t.itAssigneeIds?.includes(myEmpId);
+
+  // ── buildITColumns ───────────────────────────────────────────────────────────
   const buildITColumns = () => {
-    const myName = currentUser.emp_Name;
     const openUnassigned = visibleTickets.filter(
       (t) => !t.enrolledByIT && t.status === "Open",
     );
-    const combinedQueue = visibleTickets.filter(
+
+    // Queue: enrolled, not-closed, not-open, NOT mine
+    const queueTickets = visibleTickets.filter(
       (t) =>
         t.enrolledByIT &&
         t.status !== "Closed" &&
-        t.status !== "Resolved" &&
-        !TESTING_STATUSES.includes(t.status) &&
-        t.status !== "On Hold" &&
-        t.status !== "Waiting for User Input" &&
-        t.status !== "In Progress" &&
-        t.status !== "Assigned" &&
-        !t.itAssignees?.includes(myName),
+        t.status !== "Open" &&
+        !isMine(t),
     );
+
     const assignedToMe = visibleTickets.filter(
-      (t) =>
-        t.enrolledByIT &&
-        t.status === "Assigned" &&
-        t.itAssignees?.includes(myName),
+      (t) => t.enrolledByIT && t.status === "Assigned" && isMine(t),
     );
-    const inProgressMine = visibleTickets.filter(
-      (t) =>
-        t.enrolledByIT &&
-        t.status === "In Progress" &&
-        t.itAssignees?.includes(myName),
+
+    const acceptanceMe = visibleTickets.filter(
+      (t) => t.status === "Acceptance" && isMine(t),
     );
-    const testingCol = visibleTickets.filter(
-      (t) => t.enrolledByIT && TESTING_STATUSES.includes(t.status),
+
+    const inProgressMe = visibleTickets.filter(
+      (t) => t.enrolledByIT && t.status === "In Progress" && isMine(t),
     );
-    const waitingCol = visibleTickets.filter(
+
+    const testingMe = visibleTickets.filter(
+      (t) => t.enrolledByIT && TESTING_STATUSES.includes(t.status) && isMine(t),
+    );
+
+    const waitingMe = visibleTickets.filter(
       (t) =>
         t.status === "Waiting for User Input" &&
-        FULL_FLOW_CATEGORIES.includes(t.category),
+        FULL_FLOW_CATEGORIES.includes(t.category) &&
+        isMine(t),
     );
-    const onHoldCol = visibleTickets.filter(
+
+    const onHoldMe = visibleTickets.filter(
       (t) =>
-        t.status === "On Hold" && FULL_FLOW_CATEGORIES.includes(t.category),
+        t.status === "On Hold" &&
+        FULL_FLOW_CATEGORIES.includes(t.category) &&
+        isMine(t),
     );
-    const resolvedCol = visibleTickets.filter((t) => t.status === "Resolved"); // Change 9
-    const closedCol = visibleTickets.filter((t) => t.status === "Closed");
-    return [
+
+    const resolvedMe = visibleTickets.filter(
+      (t) => t.status === "Resolved" && isMine(t),
+    );
+
+    const closedAll = visibleTickets.filter((t) => t.status === "Closed");
+
+    const cols = [
       {
         key: "open",
         label: "Open",
@@ -4225,8 +4381,8 @@ export default function HelpdeskPage() {
           chip: "bg-slate-100 text-slate-600",
           Icon: List,
         },
-        items: combinedQueue,
-        subtitle: "All assigned tickets",
+        items: queueTickets,
+        subtitle: "Others' ongoing tickets",
         accent: "slate",
       },
       {
@@ -4238,15 +4394,23 @@ export default function HelpdeskPage() {
         accent: "purple",
       },
       {
-        key: "in_progress",
+        key: "acceptance_me",
+        label: "Acceptance",
+        meta: STATUS_META["Acceptance"],
+        items: acceptanceMe,
+        subtitle: "Review then start work",
+        accent: "sky",
+      },
+      {
+        key: "in_progress_me",
         label: "In Progress",
         meta: STATUS_META["In Progress"],
-        items: inProgressMine,
+        items: inProgressMe,
         subtitle: "My active work",
         accent: "blue",
       },
       {
-        key: "testing",
+        key: "testing_me",
         label: "Testing",
         meta: {
           dot: "bg-indigo-500",
@@ -4254,115 +4418,146 @@ export default function HelpdeskPage() {
           chip: "bg-indigo-100 text-indigo-700",
           Icon: FlaskConical,
         },
-        items: testingCol,
+        items: testingMe,
         subtitle: "IT / User testing",
         accent: "indigo",
       },
-      ...(waitingCol.length > 0
-        ? [
-            {
-              key: "waiting",
-              label: "Waiting for User Input",
-              meta: STATUS_META["Waiting for User Input"],
-              items: waitingCol,
-              subtitle: "Awaiting user response",
-              accent: "orange",
-            },
-          ]
-        : []),
-      ...(onHoldCol.length > 0
-        ? [
-            {
-              key: "on_hold",
-              label: "On Hold",
-              meta: STATUS_META["On Hold"],
-              items: onHoldCol,
-              subtitle: "Blocked / paused",
-              accent: "amber",
-            },
-          ]
-        : []),
+    ];
+
+    if (waitingMe.length > 0)
+      cols.push({
+        key: "waiting_me",
+        label: "Waiting for User Input",
+        meta: STATUS_META["Waiting for User Input"],
+        items: waitingMe,
+        subtitle: "Awaiting user response",
+        accent: "orange",
+      });
+
+    if (onHoldMe.length > 0)
+      cols.push({
+        key: "on_hold_me",
+        label: "On Hold",
+        meta: STATUS_META["On Hold"],
+        items: onHoldMe,
+        subtitle: "Blocked / paused",
+        accent: "amber",
+      });
+
+    cols.push(
       {
-        key: "resolved",
+        key: "resolved_me",
         label: "Resolved",
         meta: STATUS_META["Resolved"],
-        items: resolvedCol,
-        subtitle: "Awaiting user confirmation",
+        items: resolvedMe,
+        subtitle: "Awaiting confirmation",
         accent: "emerald",
-      }, // Change 9
+      },
       {
         key: "closed",
         label: "Closed",
         meta: STATUS_META["Closed"],
-        items: closedCol,
+        items: closedAll,
         subtitle: null,
         accent: "slate",
       },
-    ];
+    );
+
+    return cols;
   };
 
+  // ── buildHRColumns ───────────────────────────────────────────────────────────
   const buildHRColumns = () => {
-    const myName = currentUser.emp_Name;
+    const openUnassigned = visibleTickets.filter(
+      (t) => !t.enrolledByIT && t.status === "Open",
+    );
+
+    // Queue: enrolled, not-closed, not-open, NOT mine
+    const queueTickets = visibleTickets.filter(
+      (t) =>
+        t.enrolledByIT &&
+        t.status !== "Closed" &&
+        t.status !== "Open" &&
+        !isMine(t),
+    );
+
+    const assignedToMe = visibleTickets.filter(
+      (t) => t.enrolledByIT && t.status === "Assigned" && isMine(t),
+    );
+
+    const acceptanceMe = visibleTickets.filter(
+      (t) => t.status === "Acceptance" && isMine(t),
+    );
+
+    const inProgressMe = visibleTickets.filter(
+      (t) => t.enrolledByIT && t.status === "In Progress" && isMine(t),
+    );
+
+    const resolvedMe = visibleTickets.filter(
+      (t) => t.status === "Resolved" && isMine(t),
+    );
+
+    const closedAll = visibleTickets.filter((t) => t.status === "Closed");
+
     return [
       {
         key: "hr_open",
         label: "Open",
         meta: STATUS_META["Open"],
-        items: visibleTickets.filter(
-          (t) => !t.enrolledByIT && t.status === "Open",
-        ),
+        items: openUnassigned,
         subtitle: "Awaiting HR",
         accent: "slate",
       },
       {
         key: "hr_queue",
         label: "Queue",
-        meta: STATUS_META["Queue"],
-        items: visibleTickets.filter(
-          (t) => t.enrolledByIT && t.status === "Queue",
-        ),
-        subtitle: "In HR queue",
+        meta: {
+          dot: "bg-slate-400",
+          txt: "text-slate-600",
+          chip: "bg-slate-100 text-slate-600",
+          Icon: List,
+        },
+        items: queueTickets,
+        subtitle: "Others' ongoing tickets",
         accent: "slate",
       },
       {
         key: "hr_assigned_me",
         label: "Assigned to Me",
         meta: STATUS_META["Assigned"],
-        items: visibleTickets.filter(
-          (t) =>
-            t.enrolledByIT &&
-            t.status === "Assigned" &&
-            t.itAssignees?.includes(myName),
-        ),
+        items: assignedToMe,
         subtitle: "Assigned to you",
         accent: "purple",
       },
       {
-        key: "hr_inprogress",
+        key: "hr_acceptance_me",
+        label: "Acceptance",
+        meta: STATUS_META["Acceptance"],
+        items: acceptanceMe,
+        subtitle: "Review then start work",
+        accent: "sky",
+      },
+      {
+        key: "hr_inprogress_me",
         label: "In Progress",
         meta: STATUS_META["In Progress"],
-        items: visibleTickets.filter(
-          (t) =>
-            t.enrolledByIT &&
-            t.status === "In Progress" &&
-            t.itAssignees?.includes(myName),
-        ),
+        items: inProgressMe,
         subtitle: "My active work",
         accent: "indigo",
       },
       {
-        key: "hr_resolved",
+        key: "hr_resolved_me",
         label: "Resolved",
         meta: STATUS_META["Resolved"],
-        items: visibleTickets.filter((t) => t.status === "Resolved"),
+        items: resolvedMe,
         subtitle: "Awaiting confirmation",
         accent: "emerald",
-      }, // Change 9
+      },
       {
         key: "hr_closed",
         label: "Closed",
         meta: STATUS_META["Closed"],
-        items: visibleTickets.filter((t) => t.status === "Closed"),
+        items: closedAll,
         subtitle: null,
         accent: "slate",
       },
@@ -4414,6 +4609,13 @@ export default function HelpdeskPage() {
       sub: "text-amber-500",
       inner: "bg-amber-50/20",
     },
+    sky: {
+      border: "border-sky-200",
+      bg: "bg-sky-50/30",
+      hdr: "border-sky-100",
+      sub: "text-sky-500",
+      inner: "bg-sky-50/20",
+    },
     slate: {
       border: "border-slate-200",
       bg: "bg-white",
@@ -4442,12 +4644,10 @@ export default function HelpdeskPage() {
       .modal-box{max-height:98vh;border-radius:.75rem;}
       .mini-modal{max-width:100%!important;}
     }
-    @media(max-width:480px){
-      .modal-overlay{padding:.5rem;}
-    }
+    @media(max-width:480px){.modal-overlay{padding:.5rem;}}
   `;
 
-  // ─── User view ──────────────────────────────────────────────────────────────
+  // ─── User view ───────────────────────────────────────────────────────────────
   if (isDeptUser) {
     return (
       <>
@@ -4506,6 +4706,11 @@ export default function HelpdeskPage() {
               setResolveError("");
               setResolveModal(true);
             }}
+            onAcceptanceTicket={() => {
+              setAcceptanceNote("");
+              setAcceptanceError("");
+              setAcceptanceModal(true);
+            }}
             strikeForm={strikeForm}
             setStrikeForm={setStrikeForm}
             strikeErrors={strikeErrors}
@@ -4526,6 +4731,8 @@ export default function HelpdeskPage() {
             onEditPriority={() => setEditPriorityModal(true)}
             detailLoading={detailLoading}
             employees={employees}
+            catalogTree={catalogTree}
+            catalogLoading={catalogLoading}
           />
         )}
         {createITOpen && (
@@ -4552,12 +4759,11 @@ export default function HelpdeskPage() {
     );
   }
 
-  // ─── IT / HR Kanban view ────────────────────────────────────────────────────
+  // ─── IT / HR Kanban view ─────────────────────────────────────────────────────
   return (
     <>
       <style>{globalStyles}</style>
       <div className="h-screen overflow-hidden bg-slate-100 text-slate-900 flex flex-col">
-        {/* Header — mobile responsive (Change 4) */}
         <header className="flex-none border-b border-slate-200 bg-white shadow-sm">
           <div className="mx-auto max-w-[1900px] px-3 sm:px-5 py-3">
             <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -4579,7 +4785,6 @@ export default function HelpdeskPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
-                {/* Change 3: name box teal, distinct from IT ticket button */}
                 <div
                   className={`flex items-center gap-2 rounded-xl px-3 py-2 border ${isHR ? "border-indigo-200 bg-indigo-50" : "border-teal-200 bg-teal-50"}`}
                 >
@@ -4602,8 +4807,6 @@ export default function HelpdeskPage() {
                     </p>
                   </div>
                 </div>
-
-                {/* Change 3: IT ticket button sky-blue (different from teal name box) */}
                 <button
                   onClick={() => setCreateITOpen(true)}
                   className="inline-flex h-9 items-center gap-1.5 rounded-xl px-3 sm:px-4 text-xs sm:text-sm font-bold text-white bg-sky-600 hover:bg-sky-700 transition-colors"
@@ -4611,13 +4814,13 @@ export default function HelpdeskPage() {
                   <Wrench className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">IT </span>Ticket
                 </button>
-                <button
+                {/* <button
                   onClick={() => setCreateHROpen(true)}
                   className="inline-flex h-9 items-center gap-1.5 rounded-xl px-3 sm:px-4 text-xs sm:text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
                 >
                   <Briefcase className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">HR </span>Ticket
-                </button>
+                </button> */}
                 <button
                   onClick={() => setExcelModalOpen(true)}
                   className={`inline-flex h-9 items-center gap-1.5 rounded-xl px-3 sm:px-4 text-xs sm:text-sm font-bold border transition-colors ${isHR ? "border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100" : "border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100"}`}
@@ -4634,7 +4837,6 @@ export default function HelpdeskPage() {
               </div>
             </div>
 
-            {/* Org filter — Change 5: default All, 4 options */}
             <div className="mt-2 sm:mt-3 flex items-center justify-between flex-wrap gap-2 sm:gap-3">
               <div className="flex items-center gap-2 flex-wrap">
                 <Filter className="w-3.5 h-3.5 text-slate-400" />
@@ -4645,13 +4847,7 @@ export default function HelpdeskPage() {
                   <button
                     key={org}
                     onClick={() => setOrgFilter(org)}
-                    className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all ${
-                      orgFilter === org
-                        ? org === "All"
-                          ? "bg-slate-800 text-white border-slate-800"
-                          : ORG_PILL[org] + " shadow-sm"
-                        : "border-slate-200 text-slate-500 hover:bg-slate-50"
-                    }`}
+                    className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all ${orgFilter === org ? (org === "All" ? "bg-slate-800 text-white border-slate-800" : ORG_PILL[org] + " shadow-sm") : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}
                   >
                     {org}
                   </button>
@@ -4665,7 +4861,6 @@ export default function HelpdeskPage() {
                   />
                 </button>
               </div>
-              {/* Stats — mobile responsive (Change 4) */}
               <div className="flex flex-wrap gap-2 items-center">
                 {[
                   { l: "Total", v: stats.total, t: "slate" },
@@ -4677,13 +4872,14 @@ export default function HelpdeskPage() {
                         { l: "Waiting", v: stats.waiting, t: "orange" },
                       ]
                     : []),
+                  { l: "Acceptance", v: stats.acceptance, t: "sky" },
                   { l: "Resolved", v: stats.resolved, t: "emerald" },
                   { l: "Closed", v: stats.closed, t: "slate" },
                   { l: "Overdue", v: stats.overdue, t: "red" },
                 ].map((s) => (
                   <div
                     key={s.l}
-                    className={`rounded-xl border px-2 sm:px-3 py-1.5 sm:py-2 ${s.t === "red" ? "bg-red-50 border-red-200 text-red-700" : s.t === "blue" ? "bg-blue-50 border-blue-200 text-blue-700" : s.t === "amber" ? "bg-amber-50 border-amber-200 text-amber-700" : s.t === "orange" ? "bg-orange-50 border-orange-200 text-orange-700" : s.t === "emerald" ? "bg-emerald-50 border-emerald-200 text-emerald-700" : "bg-slate-50 border-slate-200 text-slate-700"}`}
+                    className={`rounded-xl border px-2 sm:px-3 py-1.5 sm:py-2 ${s.t === "red" ? "bg-red-50 border-red-200 text-red-700" : s.t === "blue" ? "bg-blue-50 border-blue-200 text-blue-700" : s.t === "amber" ? "bg-amber-50 border-amber-200 text-amber-700" : s.t === "orange" ? "bg-orange-50 border-orange-200 text-orange-700" : s.t === "emerald" ? "bg-emerald-50 border-emerald-200 text-emerald-700" : s.t === "sky" ? "bg-sky-50 border-sky-200 text-sky-700" : "bg-slate-50 border-slate-200 text-slate-700"}`}
                   >
                     <p className="text-[10px] font-bold uppercase tracking-widest opacity-60">
                       {s.l}
@@ -4698,7 +4894,6 @@ export default function HelpdeskPage() {
           </div>
         </header>
 
-        {/* Kanban board */}
         <main className="flex-1 overflow-x-auto overflow-y-hidden p-3 sm:p-4 min-h-0">
           {ticketsLoading && !tickets.length ? (
             <div className="flex items-center justify-center h-full text-slate-400">
@@ -4773,7 +4968,6 @@ export default function HelpdeskPage() {
         </main>
       </div>
 
-      {/* Ticket Modal */}
       {sel && (
         <TicketModal
           ticket={sel}
@@ -4814,6 +5008,11 @@ export default function HelpdeskPage() {
             setResolveError("");
             setResolveModal(true);
           }}
+          onAcceptanceTicket={() => {
+            setAcceptanceNote("");
+            setAcceptanceError("");
+            setAcceptanceModal(true);
+          }}
           strikeForm={strikeForm}
           setStrikeForm={setStrikeForm}
           strikeErrors={strikeErrors}
@@ -4827,6 +5026,7 @@ export default function HelpdeskPage() {
           onSendMsg={sendMessage}
           msgLoading={msgLoading}
           onReassign={() => {
+            // Pre-select current assignee by ID
             setReassignee(
               employees.find((e) =>
                 sel.itAssigneeIds?.includes(String(e.emp_Id)),
@@ -4838,6 +5038,8 @@ export default function HelpdeskPage() {
           onEditPriority={() => setEditPriorityModal(true)}
           detailLoading={detailLoading}
           employees={employees}
+          catalogTree={catalogTree}
+          catalogLoading={catalogLoading}
         />
       )}
 
@@ -5003,7 +5205,69 @@ export default function HelpdeskPage() {
         </div>
       )}
 
-      {/* Change 9: Resolve modal */}
+      {/* Acceptance modal */}
+      {acceptanceModal && (
+        <div
+          className="modal-overlay"
+          onClick={(e) =>
+            e.target === e.currentTarget && setAcceptanceModal(false)
+          }
+        >
+          <div className="mini-modal p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                  <BadgeCheck className="w-4 h-4 text-sky-600" />
+                  Accept Ticket
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Confirm you have reviewed the ticket. After acceptance you can
+                  start work.
+                </p>
+              </div>
+              <button
+                onClick={() => setAcceptanceModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <Field label="Acceptance Note (optional)" error={acceptanceError}>
+              <textarea
+                rows={3}
+                value={acceptanceNote}
+                onChange={(e) => setAcceptanceNote(e.target.value)}
+                placeholder="Any notes about what you reviewed or clarified?"
+                className="w-full rounded-xl border border-sky-300 bg-white px-3 py-2.5 text-sm focus:outline-none focus:border-sky-500 resize-none"
+              />
+            </Field>
+            <div className="mt-3 p-3 rounded-xl bg-sky-50 border border-sky-200 text-xs text-sky-700">
+              <p className="font-bold mb-0.5">What happens next?</p>
+              <p>
+                Ticket moves to <b>Acceptance</b>. From there you can move it to{" "}
+                <b>In Progress</b> to begin working.
+              </p>
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={() => setAcceptanceModal(false)}
+                className="flex-1 h-10 rounded-xl border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitAcceptance}
+                className="flex-1 h-10 rounded-xl bg-sky-600 text-sm font-bold text-white hover:bg-sky-700 flex items-center justify-center gap-2"
+              >
+                <BadgeCheck className="w-4 h-4" />
+                Accept Ticket
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Resolve modal */}
       {resolveModal && (
         <div
           className="modal-overlay"
@@ -5038,15 +5302,6 @@ export default function HelpdeskPage() {
                 className="w-full rounded-xl border border-emerald-300 bg-white px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500 resize-none"
               />
             </Field>
-            <div className="mt-3 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-700">
-              <p className="font-bold mb-0.5">What happens next?</p>
-              <p>
-                Ticket moves to <b>Resolved</b>. The user/requester will be
-                asked to confirm the resolution. Once confirmed, the ticket
-                moves to <b>Closed</b>. You can also re-open it if more work is
-                needed.
-              </p>
-            </div>
             <div className="flex gap-2 mt-4">
               <button
                 onClick={() => setResolveModal(false)}
@@ -5117,7 +5372,7 @@ export default function HelpdeskPage() {
         </div>
       )}
 
-      {/* Reassign modal — Change 8: single select */}
+      {/* Reassign modal */}
       {reassignModal && (
         <div
           className="modal-overlay"
@@ -5168,7 +5423,7 @@ export default function HelpdeskPage() {
         </div>
       )}
 
-      {/* Edit Type modal — Change 6: card style */}
+      {/* Edit Type modal */}
       {editTypeModal && sel && (
         <div
           className="modal-overlay"
@@ -5273,7 +5528,6 @@ export default function HelpdeskPage() {
         </div>
       )}
 
-      {/* Create modals */}
       {createITOpen && (
         <CreateITModal
           catalogTree={catalogTree}
@@ -5294,8 +5548,6 @@ export default function HelpdeskPage() {
           submitting={submitting}
         />
       )}
-
-      {/* Excel Download Modal */}
       {excelModalOpen && (
         <ExcelDownloadModal
           onClose={() => setExcelModalOpen(false)}

@@ -1,4 +1,5 @@
-// src/components/RedirectHandler.jsx
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Box,
   CircularProgress,
@@ -11,6 +12,27 @@ import IndefLogo from "../assets/logo/IndefLogo.png";
 
 const RedirectHandler = () => {
   const theme = useTheme();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const userRaw = sessionStorage.getItem("user");
+    let isValid = false;
+
+    if (userRaw) {
+      try {
+        const userData = JSON.parse(userRaw);
+        if (userData && typeof userData === "object" && userData.emp_Id) {
+          isValid = true;
+        }
+      } catch (e) {
+        sessionStorage.removeItem("user");
+      }
+    }
+
+    if (!isValid) {
+      navigate("/helpdesk-login", { replace: true });
+    }
+  }, [navigate]);
 
   return (
     <Box
@@ -31,7 +53,6 @@ const RedirectHandler = () => {
         transition={{ duration: 0.8, ease: "easeOut" }}
       >
         <Stack spacing={3} alignItems="center">
-          {/* Animated Logo */}
           <motion.img
             src={IndefLogo}
             alt="Indef Logo"
@@ -43,15 +64,15 @@ const RedirectHandler = () => {
               height: "auto",
               borderRadius: "12px",
               boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-              backgroundColor: "#fff", // Optional: to make transparent logos visible
-              padding: "4px", // Optional: some spacing
+              backgroundColor: "#fff",
+              padding: "4px",
             }}
           />
 
           <CircularProgress color="inherit" thickness={4} />
 
           <Typography variant="h5" fontWeight={500}>
-            Redirecting...
+            Loading...
           </Typography>
 
           <Typography variant="body2" sx={{ opacity: 0.85 }}>
