@@ -2359,6 +2359,8 @@ function TicketModal({
     groups.length > 0 &&
     groups[groups.length - 1].every((s) => s.response_Received);
 
+  console.log("enrollForm", enrollForm);
+
   return (
     <div
       className="modal-overlay"
@@ -2800,24 +2802,48 @@ function TicketModal({
                           />
                         </Field>
                         {!isHRTicket && enrollForm.ticketType === "Incident" ? (
-                          <Field
-                            label="Expected Hours"
-                            error={enrollErrors.etaHours}
-                          >
-                            <input
-                              type="number"
-                              min="1"
-                              value={enrollForm.etaHours}
-                              onChange={(e) =>
-                                setEnrollForm((p) => ({
-                                  ...p,
-                                  etaHours: e.target.value,
-                                }))
-                              }
-                              placeholder="e.g. 4"
-                              className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm focus:outline-none focus:border-red-400"
-                            />
-                          </Field>
+                          (() => {
+                            const incidentETA = {
+                              Critical: {
+                                label: "4 Hours",
+                                hours: "4",
+                                badge: "bg-red-100 text-red-700 border-red-200",
+                              },
+                              Medium: {
+                                label: "2 Days",
+                                hours: "48",
+                                badge:
+                                  "bg-amber-100 text-amber-700 border-amber-200",
+                              },
+                              Normal: {
+                                label: "4 Days",
+                                hours: "96",
+                                badge:
+                                  "bg-blue-100 text-blue-700 border-blue-200",
+                              },
+                            }[enrollForm.priority];
+                            return (
+                              <Field
+                                label="Est. Completion"
+                                error={enrollErrors.etaHours}
+                              >
+                                {incidentETA ? (
+                                  <div
+                                    className={`h-10 w-full rounded-xl border-2 px-3 flex items-center justify-between text-sm font-bold ${incidentETA.badge}`}
+                                  >
+                                    <span>{incidentETA.label}</span>
+                                    <span className="text-[10px] font-semibold opacity-60 uppercase tracking-widest">
+                                      Auto-set
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <div className="h-10 w-full rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 flex items-center text-xs text-slate-400 italic">
+                                    Select priority first…
+                                  </div>
+                                )}
+                              </Field>
+                            );
+                          })()
                         ) : (
                           <Field label="ETA Date" error={enrollErrors.etaDate}>
                             <input
@@ -3782,15 +3808,28 @@ export default function HelpdeskPage() {
   }, [selectedId, employees]);
 
   useEffect(() => {
+    // AFTER
+    const ticketForEnroll = tickets.find((t) => t.id === selectedId);
     setEnrollForm({
-      assignee: null,
-      itStartDate: todayISO(),
-      etaDate: "",
-      etaHours: "",
-      itRemarks: "",
-      priority: "Medium",
-      ticketType: "Service Request",
-      enrollCatalogValue: { parentName: "", categoryName: "", subCategory: "" },
+      assignee:
+        ticketForEnroll?.itAssigneeIds?.length && employees.length
+          ? employees.find((e) =>
+              ticketForEnroll.itAssigneeIds.includes(String(e.emp_Id)),
+            ) || null
+          : null,
+      itStartDate: ticketForEnroll?.itStartDate || todayISO(),
+      etaDate: ticketForEnroll?.etaDate || "",
+      etaHours: ticketForEnroll?.etaHours || "",
+      itRemarks: ticketForEnroll?.itRemarks || "",
+      priority: ticketForEnroll?.priority || "Medium",
+      ticketType: ticketForEnroll?.requestType || "Service Request",
+      enrollCatalogValue: ticketForEnroll?.catalogParent
+        ? {
+            parentName: ticketForEnroll.catalogParent,
+            categoryName: ticketForEnroll.catalogCategory || "",
+            subCategory: ticketForEnroll.catalogSubCategory || "",
+          }
+        : { parentName: "", categoryName: "", subCategory: "" },
     });
     setEnrollErrors({});
     setHoldModal(false);
@@ -3806,7 +3845,7 @@ export default function HelpdeskPage() {
     setReassignee(null);
     setEditTypeModal(false);
     setEditPriorityModal(false);
-  }, [selectedId]);
+  }, [selectedId, tickets, employees]);
 
   const sel = useMemo(() => {
     if (!selectedId) return null;
@@ -3876,8 +3915,8 @@ export default function HelpdeskPage() {
     if (!isHRTicket && !enrollForm.ticketType)
       errs.ticketType = "Ticket type required.";
     const isInc = !isHRTicket && enrollForm.ticketType === "Incident";
-    if (isInc && !enrollForm.etaHours)
-      errs.etaHours = "Expected hours required.";
+    if (isInc && !enrollForm.priority)
+      errs.priority = "Priority required to auto-set completion time.";
     if (!isInc && !enrollForm.etaDate) errs.etaDate = "ETA required.";
     setEnrollErrors(errs);
     if (Object.keys(errs).length) return;
@@ -3894,13 +3933,19 @@ export default function HelpdeskPage() {
           )
         : null;
 
+      const INCIDENT_HOURS = { Critical: "4", Medium: "48", Normal: "96" };
+      const resolvedEtaHours =
+        isHRTicket || enrollForm.ticketType !== "Incident"
+          ? ""
+          : INCIDENT_HOURS[enrollForm.priority] || "";
+
       await ITHelpdeskService.enrollTicket({
         ticket_Id: sel.id,
         priority: enrollForm.priority,
         req_Type: isHRTicket ? "Service Request" : enrollForm.ticketType,
         assigned_Person: JSON.stringify(enrollForm.assignee.emp_Id),
         eta_Date: enrollForm.etaDate || null,
-        eta_Time: enrollForm.etaHours || "",
+        eta_Time: resolvedEtaHours,
         remarks: enrollForm.itRemarks.trim(),
         updated_By: currentUser.emp_Id,
         ...(updatedCategoryStr ? { category: updatedCategoryStr } : {}),
@@ -4274,6 +4319,7 @@ export default function HelpdeskPage() {
 
   const handleLogout = () => {
     sessionStorage.removeItem("user");
+    sessionStorage.setItem("explicit_logout", "true");
     window.location.href = "/";
   };
 

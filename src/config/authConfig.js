@@ -7,7 +7,7 @@ export const msalConfig = {
     postLogoutRedirectUri: window.location.origin + "/helpdesk-login",
   },
   cache: {
-    cacheLocation: "sessionStorage",
+    cacheLocation: "localStorage",
     storeAuthStateInCookie: false,
   },
 };
