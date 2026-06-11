@@ -74,6 +74,8 @@ const HelpdeskService = {
       formData.append("Created_By", payload.submitted_by || "");
       formData.append("Priority", payload.priority || "");
       formData.append("Parent_Ticket_Id", payload.parent_ticket_id || "");
+      formData.append("Creator_Email", payload.Creator_Email || "");
+      formData.append("Creator_Name", payload.Creator_Name || "");
 
       if (payload.file) {
         formData.append("AttachmentFile", payload.file);

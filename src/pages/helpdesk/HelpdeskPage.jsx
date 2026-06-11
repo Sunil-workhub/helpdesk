@@ -66,7 +66,7 @@ function deriveRole(deptId) {
 }
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
-const CATALOG_CACHE_KEY = "enlife_hd_catalog_v2";
+// const CATALOG_CACHE_KEY = "enlife_hd_catalog_v2";
 
 const CATEGORY_META = {
   software: {
@@ -1541,7 +1541,7 @@ function CreateITModal({
               ))}
             </div>
           </Field>
-          <Field label="Attachment (optional)">
+          {/* <Field label="Attachment (optional)">
             <div
               onClick={() => fileRef.current?.click()}
               className={`flex items-center gap-3 rounded-xl border-2 border-dashed cursor-pointer px-4 py-3 transition-all ${form.attachment ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white"}`}
@@ -1590,7 +1590,7 @@ function CreateITModal({
               }}
               accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.txt"
             />
-          </Field>
+          </Field> */}
         </div>
         <div className="flex-none border-t border-slate-100 px-6 py-4 flex items-center justify-between gap-3">
           <p className="text-xs text-slate-400">
@@ -2001,7 +2001,7 @@ function UserDashboard({
                   Helpdesk · My Tickets
                 </h1>
                 <p className="text-[11px] text-slate-500 font-medium hidden sm:block">
-                  Enlife System ·{" "}
+                  {/* Enlife System ·{" "} */}
                   <span
                     className={`font-bold px-1.5 py-0.5 rounded-full text-[10px] ${ORG_PILL[currentUser.org_Id] || ""}`}
                   >
@@ -2109,7 +2109,7 @@ function UserDashboard({
                   </p>
                 </div>
               </button>
-              <button
+              {/* <button
                 onClick={onCreateHRTicket}
                 className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-indigo-200 bg-indigo-50 hover:border-indigo-400 p-6 transition-all"
               >
@@ -2123,8 +2123,8 @@ function UserDashboard({
                   <p className="text-xs text-indigo-400 mt-0.5">
                     Payroll, attendance, HR
                   </p>
-                </div>
-              </button>
+                </div> 
+              </button>*/}
             </div>
           </div>
         ) : (
@@ -3740,19 +3740,10 @@ export default function HelpdeskPage() {
   }, [isIT, isHR, currentUser.emp_Id, orgFilter]);
 
   useEffect(() => {
-    const cached = sessionStorage.getItem(CATALOG_CACHE_KEY);
-    if (cached) {
-      try {
-        setCatalogRaw(JSON.parse(cached));
-        return;
-      } catch (e) {}
-    }
     setCatalogLoading(true);
     HelpdeskService.GetHDCatalog()
       .then((res) => {
-        const items = res?.data || [];
-        setCatalogRaw(items);
-        sessionStorage.setItem(CATALOG_CACHE_KEY, JSON.stringify(items));
+        setCatalogRaw(res?.data || []);
       })
       .catch((e) => console.error("Catalog fetch failed:", e))
       .finally(() => setCatalogLoading(false));
@@ -3894,6 +3885,8 @@ export default function HelpdeskPage() {
         priority: fields.priority || "",
         parent_ticket_id: fields.parentId || "",
         file: fields.attachment || null,
+        Creator_Email: currentUser.emp_Email,
+        Creator_Name: currentUser.first_Name + " " + currentUser.last_Name,
       };
       await ITHelpdeskService.createITHelpdeskTicket(payload);
       await fetchTickets();
@@ -4823,7 +4816,7 @@ export default function HelpdeskPage() {
                 </div>
                 <div>
                   <h1 className="text-base sm:text-lg font-extrabold tracking-tight text-slate-900 leading-tight">
-                    {isHR ? "HR" : "IT"} Helpdesk · Enlife
+                    {isHR ? "HR" : "IT"} Helpdesk
                   </h1>
                   <p className="text-[11px] text-slate-500 font-medium hidden sm:block">
                     Category-driven ticket management
